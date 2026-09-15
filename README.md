@@ -587,13 +587,8 @@ npm install
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-
-DATABASE_URL=
-
-OPENAI_API_KEY=
-
-NEXT_PUBLIC_KAKAO_MAP_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 ```
 
 > API Key 및 환경 변수 파일은 GitHub에 업로드하지 않습니다.
@@ -668,11 +663,11 @@ AI Docent 생성
 
 ### Core
 
-- [ ] 콘텐츠 목록 조회
+- [x] 콘텐츠 목록 조회
 - [ ] 콘텐츠 검색
 - [ ] 배우 검색
 - [ ] 배우 출연 작품 조회
-- [ ] 작품별 촬영지 조회
+- [x] 작품별 촬영지 조회
 - [ ] 여행 조건 입력
 - [ ] Course 생성
 - [ ] Course UI
