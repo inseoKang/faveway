@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const durations = [
   {
@@ -24,6 +24,7 @@ type PlanningInput = {
 };
 
 function PlanningContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const contentId = searchParams.get("contentId");
@@ -31,7 +32,10 @@ function PlanningContent() {
 
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
-  function handleCreateCourse() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleCreateCourse() {
     if (!contentId || !durationMinutes) {
       return;
     }
@@ -41,10 +45,40 @@ function PlanningContent() {
       durationMinutes,
     };
 
-    console.log("PlanningInput:", planningInput);
+    try {
+      setIsSubmitting(true);
+      setError("");
 
-    // 다음 단계에서 이 부분을
-    // POST /api/trips 호출로 변경할 예정
+      const response = await fetch("/api/trips", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(planningInput),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message ?? "코스를 생성하지 못했습니다.");
+      }
+
+      const courseData = encodeURIComponent(JSON.stringify(result.data));
+
+      router.push(
+        `/course?data=${courseData}&title=${encodeURIComponent(
+          contentTitle ?? "",
+        )}`,
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "알 수 없는 오류가 발생했습니다.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -73,6 +107,7 @@ function PlanningContent() {
                 key={duration.value}
                 type="button"
                 onClick={() => setDurationMinutes(duration.value)}
+                disabled={isSubmitting}
                 className={`rounded-2xl border px-4 py-4 text-sm font-medium transition ${
                   selected
                     ? "border-black bg-black text-white"
@@ -86,13 +121,19 @@ function PlanningContent() {
         </div>
       </section>
 
+      {error && (
+        <p className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+
       <button
         type="button"
-        disabled={!contentId || !durationMinutes}
+        disabled={!contentId || !durationMinutes || isSubmitting}
         onClick={handleCreateCourse}
         className="mt-10 w-full rounded-2xl bg-black py-4 font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
       >
-        코스 만들기
+        {isSubmitting ? "코스를 만드는 중..." : "코스 만들기"}
       </button>
     </main>
   );

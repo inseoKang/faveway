@@ -462,19 +462,15 @@ POST   /api/docent
 
 ### `POST /api/trips`
 
-여행 코스를 생성하는 핵심 API입니다.
+현재 MVP에서는 AI 연결 전 전체 흐름을 검증하기 위해 규칙 기반으로 코스를 생성합니다.
 
 ```text
 1. DB Candidate 조회
-2. 서울 지역 필터링
-3. Active 장소 필터링
-4. Actor Relation 우선 적용
-5. AI Input 생성
-6. AI Course 생성
-7. Structured Output 검증
-8. Candidate ID 검증
-9. Trip 저장
-10. 결과 반환
+2. 비활성 장소 제외
+3. 중복 장소 제거
+4. 최대 3개 촬영지 선택
+5. 여행 가능 시간을 장소 수에 맞게 분배
+6. Course 결과 반환
 ```
 
 ---
@@ -663,9 +659,9 @@ AI Docent 생성
 - [ ] 배우 검색
 - [ ] 배우 출연 작품 조회
 - [x] 작품별 촬영지 조회
-- [ ] 여행 조건 입력
-- [ ] Course 생성
-- [ ] Course UI
+- [x] 여행 가능 시간 입력
+- [x] Course 생성
+- [x] Course UI
 - [ ] 장소 삭제
 
 ### AI
@@ -738,9 +734,12 @@ Raw CSV
 → Relational Database
 ```
 
-### 2. DB Candidate 기반 AI Recommendation
+### 2. DB Candidate 기반 Course Pipeline
 
-LLM에게 여행 장소 생성을 맡기지 않고 DB에서 검증된 Candidate를 조회한 뒤 AI가 선택과 정렬만 담당하도록 구성합니다.
+DB에서 실제 촬영지 Candidate를 조회한 뒤 필터링하여 코스를 구성합니다.
+
+현재는 규칙 기반으로 전체 흐름을 검증하고 있으며,
+이후 AI가 Candidate 안에서 선택·정렬하도록 확장할 예정입니다.
 
 ```text
 DB Candidate
