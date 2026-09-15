@@ -43,6 +43,7 @@ const walkingOptions = [
 
 type PlanningInput = {
   contentId: number;
+  actorId: number | null;
   durationMinutes: number;
   maxWalkingMinutes: number | null;
 };
@@ -53,6 +54,9 @@ function PlanningContent() {
 
   const contentId = searchParams.get("contentId");
   const contentTitle = searchParams.get("title");
+
+  const actorId = searchParams.get("actorId");
+  const actorName = searchParams.get("actorName");
 
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
@@ -70,8 +74,25 @@ function PlanningContent() {
       return;
     }
 
+    const parsedContentId = Number(contentId);
+    const parsedActorId = actorId ? Number(actorId) : null;
+
+    if (!Number.isInteger(parsedContentId) || parsedContentId <= 0) {
+      setError("잘못된 작품 정보입니다.");
+      return;
+    }
+
+    if (
+      parsedActorId !== null &&
+      (!Number.isInteger(parsedActorId) || parsedActorId <= 0)
+    ) {
+      setError("잘못된 배우 정보입니다.");
+      return;
+    }
+
     const planningInput: PlanningInput = {
-      contentId: Number(contentId),
+      contentId: parsedContentId,
+      actorId: parsedActorId,
       durationMinutes,
       maxWalkingMinutes,
     };
@@ -96,11 +117,16 @@ function PlanningContent() {
 
       const courseData = encodeURIComponent(JSON.stringify(result.data));
 
-      router.push(
-        `/course?data=${courseData}&title=${encodeURIComponent(
-          contentTitle ?? "",
-        )}`,
-      );
+      const params = new URLSearchParams({
+        data: courseData,
+        title: contentTitle ?? "",
+      });
+
+      if (actorName) {
+        params.set("actorName", actorName);
+      }
+
+      router.push(`/course?${params.toString()}`);
     } catch (error) {
       setError(
         error instanceof Error
@@ -123,6 +149,10 @@ function PlanningContent() {
           <p className="mt-3 text-sm text-gray-500">
             선택한 작품: {contentTitle}
           </p>
+        )}
+
+        {actorName && (
+          <p className="mt-1 text-sm text-gray-500">선택한 배우: {actorName}</p>
         )}
       </header>
 
