@@ -5,18 +5,18 @@ export async function GET() {
   try {
     const supabase = createServerSupabaseClient();
 
-    const { data, error } = await supabase.from("test_items").select("*");
+    const { data, error } = await supabase
+      .from("contents")
+      .select("*")
+      .order("id", { ascending: true });
 
     if (error) {
       console.error("Supabase error:", error);
 
       return NextResponse.json(
         {
-          message: "Supabase query failed",
+          message: "Failed to fetch contents",
           error: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
         },
         { status: 500 },
       );
