@@ -31,10 +31,10 @@ type Place = {
 
 type PlaceRelation = {
   id: number;
-  actor_id: number | null;
   relation_type: string;
   verification_status: string;
   verified_fact: string | null;
+  isActorScenePlace: boolean;
   places: Place;
 };
 
@@ -47,26 +47,53 @@ export default function ExplorePage() {
 
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
+  /**
+   * 배우로 찾기
+   */
   const [actors, setActors] = useState<Actor[]>([]);
 
   const [selectedActor, setSelectedActor] = useState<Actor | null>(null);
 
   const [actorQuery, setActorQuery] = useState("");
 
+  /**
+   * 작품으로 찾기에서 사용하는
+   * 작품 출연 배우 목록
+   */
+  const [contentActors, setContentActors] = useState<Actor[]>([]);
+
+  const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
+
+  /**
+   * 촬영지
+   */
   const [places, setPlaces] = useState<PlaceRelation[]>([]);
 
+  /**
+   * Loading
+   */
   const [contentsLoading, setContentsLoading] = useState(true);
 
   const [actorLoading, setActorLoading] = useState(false);
 
+  const [contentActorsLoading, setContentActorsLoading] = useState(false);
+
   const [placesLoading, setPlacesLoading] = useState(false);
 
+  /**
+   * Error
+   */
   const [contentsError, setContentsError] = useState("");
 
   const [actorError, setActorError] = useState("");
 
+  const [contentActorsError, setContentActorsError] = useState("");
+
   const [placesError, setPlacesError] = useState("");
 
+  /**
+   * 작품 전체 목록 조회
+   */
   async function fetchAllContents() {
     try {
       setContentsLoading(true);
@@ -92,6 +119,9 @@ export default function ExplorePage() {
     }
   }
 
+  /**
+   * 최초 진입 시 콘텐츠 목록 조회
+   */
   useEffect(() => {
     let cancelled = false;
 
@@ -132,8 +162,6 @@ export default function ExplorePage() {
 
   /**
    * 배우 이름 부분 검색
-   *
-   * 입력 후 300ms가 지나면 자동 검색한다.
    */
   useEffect(() => {
     if (mode !== "ACTOR") {
@@ -173,32 +201,133 @@ export default function ExplorePage() {
       }
     }, 300);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [actorQuery, mode]);
+
+  /**
+   * 작품의 출연 배우 조회
+   */
+  async function fetchContentActors(contentId: number) {
+    try {
+      setContentActorsLoading(true);
+      setContentActorsError("");
+
+      const response = await fetch(`/api/contents/${contentId}/actors`);
+
+      if (!response.ok) {
+        const result = await response.json();
+
+        throw new Error(result.message ?? "출연 배우를 불러오지 못했습니다.");
+      }
+
+      const result = await response.json();
+
+      setContentActors(result.data ?? []);
+    } catch (error) {
+      setContentActorsError(
+        error instanceof Error
+          ? error.message
+          : "알 수 없는 오류가 발생했습니다.",
+      );
+
+      setContentActors([]);
+    } finally {
+      setContentActorsLoading(false);
+    }
+  }
+
+  /**
+   * 작품 + 선택 배우 기준 촬영지 조회
+   *
+   * actorIds = []
+   * → 작품 전체 촬영지
+   *
+   * actorIds = [1, 2]
+   * → 배우 1 또는 배우 2가 등장한 Scene의 촬영지
+   */
+  async function fetchPlaces(contentId: number, actorIds: number[]) {
+    try {
+      setPlacesLoading(true);
+      setPlacesError("");
+
+      const searchParams = new URLSearchParams();
+
+      if (actorIds.length > 0) {
+        searchParams.set("actorIds", actorIds.join(","));
+      }
+
+      const queryString = searchParams.toString();
+
+      const url = queryString
+        ? `/api/contents/${contentId}/places?${queryString}`
+        : `/api/contents/${contentId}/places`;
+
+      const response = await fetch(url);
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message ?? "촬영지를 불러오지 못했습니다.");
+      }
+
+      setPlaces(result.data ?? []);
+    } catch (error) {
+      setPlaces([]);
+
+      setPlacesError(
+        error instanceof Error
+          ? error.message
+          : "알 수 없는 오류가 발생했습니다.",
+      );
+    } finally {
+      setPlacesLoading(false);
+    }
+  }
 
   function resetSelection() {
     setSelectedActor(null);
+    setSelectedActors([]);
     setSelectedContent(null);
+
+    setContentActors([]);
     setPlaces([]);
+
     setPlacesError("");
+    setContentActorsError("");
   }
 
   async function handleChangeMode(nextMode: SearchMode) {
     setMode(nextMode);
+
     resetSelection();
+
+    setActorQuery("");
+    setActors([]);
+    setActorError("");
 
     if (nextMode === "CONTENT") {
       await fetchAllContents();
     } else {
       setContents([]);
+      setContentsError("");
+      setContentsLoading(false);
     }
   }
 
+  /**
+   * 배우로 찾기에서 배우 선택
+   */
   async function handleSelectActor(actor: Actor) {
     setSelectedActor(actor);
+
+    setSelectedActors([]);
     setSelectedContent(null);
+
     setPlaces([]);
     setContents([]);
+
     setContentsError("");
 
     try {
@@ -206,11 +335,13 @@ export default function ExplorePage() {
 
       const response = await fetch(`/api/actors/${actor.id}/contents`);
 
-      if (!response.ok) {
-        throw new Error("배우의 출연 작품을 불러오지 못했습니다.");
-      }
-
       const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.message ?? "배우의 출연 작품을 불러오지 못했습니다.",
+        );
+      }
 
       setContents(result.data ?? []);
     } catch (error) {
@@ -224,40 +355,79 @@ export default function ExplorePage() {
     }
   }
 
+  /**
+   * 작품 선택
+   */
   async function handleSelectContent(content: Content) {
     setSelectedContent(content);
 
     setPlaces([]);
     setPlacesError("");
-    setPlacesLoading(true);
 
-    try {
-      const actorQueryString = selectedActor
-        ? `?actorId=${selectedActor.id}`
-        : "";
+    /**
+     * 작품으로 찾기
+     *
+     * 작품을 선택하면
+     * 전체 촬영지 + 등장 배우를 조회한다.
+     *
+     * 초기 배우 선택은 0명.
+     */
+    if (mode === "CONTENT") {
+      setSelectedActors([]);
 
-      const response = await fetch(
-        `/api/contents/${content.id}/places${actorQueryString}`,
-      );
+      await Promise.all([
+        fetchContentActors(content.id),
+        fetchPlaces(content.id, []),
+      ]);
 
-      if (!response.ok) {
-        throw new Error("촬영지를 불러오지 못했습니다.");
-      }
+      return;
+    }
 
-      const result = await response.json();
-
-      setPlaces(result.data ?? []);
-    } catch (error) {
-      setPlacesError(
-        error instanceof Error
-          ? error.message
-          : "알 수 없는 오류가 발생했습니다.",
-      );
-    } finally {
-      setPlacesLoading(false);
+    /**
+     * 배우로 찾기
+     *
+     * 선택한 배우 한 명의 Scene 촬영지만 조회한다.
+     */
+    if (selectedActor) {
+      await fetchPlaces(content.id, [selectedActor.id]);
     }
   }
 
+  /**
+   * 작품으로 찾기에서 배우 선택 / 해제
+   */
+  function handleToggleContentActor(actor: Actor) {
+    if (!selectedContent) {
+      return;
+    }
+
+    const alreadySelected = selectedActors.some(
+      (selected) => selected.id === actor.id,
+    );
+
+    const nextActors = alreadySelected
+      ? selectedActors.filter((selected) => selected.id !== actor.id)
+      : [...selectedActors, actor];
+
+    setSelectedActors(nextActors);
+
+    /**
+     * 중요:
+     * nextActors를 이용해야 한다.
+     *
+     * setSelectedActors는 비동기이기 때문에
+     * 기존 selectedActors를 그대로 보내면
+     * 한 단계 이전 선택값이 API로 전달될 수 있다.
+     */
+    void fetchPlaces(
+      selectedContent.id,
+      nextActors.map((selected) => selected.id),
+    );
+  }
+
+  /**
+   * Planning으로 이동
+   */
   function handleStartPlanning() {
     if (!selectedContent) {
       return;
@@ -268,14 +438,45 @@ export default function ExplorePage() {
       title: selectedContent.title,
     });
 
-    if (selectedActor) {
-      params.set("actorId", selectedActor.id.toString());
+    let actorsForPlanning: Actor[] = [];
 
-      params.set("actorName", selectedActor.name);
+    /**
+     * 배우로 찾기
+     */
+    if (mode === "ACTOR" && selectedActor) {
+      actorsForPlanning = [selectedActor];
+    }
+
+    /**
+     * 작품으로 찾기
+     */
+    if (mode === "CONTENT") {
+      actorsForPlanning = selectedActors;
+    }
+
+    /**
+     * 배우를 한 명 이상 선택했을 때만
+     * actorIds / actorNames를 URL에 포함한다.
+     */
+    if (actorsForPlanning.length > 0) {
+      params.set(
+        "actorIds",
+        actorsForPlanning.map((actor) => actor.id).join(","),
+      );
+
+      params.set(
+        "actorNames",
+        actorsForPlanning.map((actor) => actor.name).join(","),
+      );
     }
 
     router.push(`/planning?${params.toString()}`);
   }
+
+  const selectedActorNames =
+    mode === "ACTOR" && selectedActor
+      ? [selectedActor.name]
+      : selectedActors.map((actor) => actor.name);
 
   return (
     <main className="mx-auto min-h-screen max-w-md p-6">
@@ -292,11 +493,11 @@ export default function ExplorePage() {
       <section className="mb-8 grid grid-cols-2 gap-3">
         <button
           type="button"
-          onClick={() => handleChangeMode("CONTENT")}
+          onClick={() => void handleChangeMode("CONTENT")}
           className={`rounded-2xl border py-3 text-sm font-semibold ${
             mode === "CONTENT"
               ? "border-black bg-black text-white"
-              : "border-gray-200"
+              : "border-gray-200 bg-white"
           }`}
         >
           작품으로 찾기
@@ -304,11 +505,11 @@ export default function ExplorePage() {
 
         <button
           type="button"
-          onClick={() => handleChangeMode("ACTOR")}
+          onClick={() => void handleChangeMode("ACTOR")}
           className={`rounded-2xl border py-3 text-sm font-semibold ${
             mode === "ACTOR"
               ? "border-black bg-black text-white"
-              : "border-gray-200"
+              : "border-gray-200 bg-white"
           }`}
         >
           배우로 찾기
@@ -365,9 +566,9 @@ export default function ExplorePage() {
                   <button
                     key={actor.id}
                     type="button"
-                    onClick={() => handleSelectActor(actor)}
+                    onClick={() => void handleSelectActor(actor)}
                     className={`w-full rounded-2xl border p-4 text-left ${
-                      selected ? "border-black" : "border-gray-200"
+                      selected ? "border-black bg-gray-50" : "border-gray-200"
                     }`}
                   >
                     <p className="font-semibold">{actor.name}</p>
@@ -380,7 +581,7 @@ export default function ExplorePage() {
       )}
 
       {selectedActor && (
-        <div className="mb-5 rounded-2xl bg-gray-50 p-4">
+        <section className="mb-6 rounded-2xl bg-gray-50 p-4">
           <p className="text-xs text-gray-500">선택한 배우</p>
 
           <p className="mt-1 font-semibold">{selectedActor.name}</p>
@@ -388,7 +589,7 @@ export default function ExplorePage() {
           <p className="mt-1 text-sm text-gray-500">
             어떤 작품 속 {selectedActor.name}을 따라가 볼까요?
           </p>
-        </div>
+        </section>
       )}
 
       {contentsLoading && (
@@ -417,9 +618,11 @@ export default function ExplorePage() {
               <button
                 key={content.id}
                 type="button"
-                onClick={() => handleSelectContent(content)}
+                onClick={() => void handleSelectContent(content)}
                 className={`w-full rounded-2xl border p-4 text-left transition ${
-                  selected ? "border-black" : "border-gray-200"
+                  selected
+                    ? "border-black bg-gray-50"
+                    : "border-gray-200 bg-white"
                 }`}
               >
                 <p className="font-semibold">{content.title}</p>
@@ -439,6 +642,70 @@ export default function ExplorePage() {
         </section>
       )}
 
+      {selectedContent && mode === "CONTENT" && (
+        <section className="mt-8">
+          <h2 className="font-semibold">등장 배우</h2>
+
+          <p className="mt-1 text-sm leading-6 text-gray-500">
+            원하는 배우를 선택해주세요.
+            <br />
+            아무도 선택하지 않으면 작품 전체 촬영지를 보여드립니다.
+          </p>
+
+          {contentActorsLoading && (
+            <p className="mt-4 text-sm text-gray-500">
+              출연 배우를 불러오는 중...
+            </p>
+          )}
+
+          {contentActorsError && (
+            <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+              {contentActorsError}
+            </p>
+          )}
+
+          {!contentActorsLoading &&
+            !contentActorsError &&
+            contentActors.length === 0 && (
+              <p className="mt-4 text-sm text-gray-500">
+                등록된 출연 배우가 없습니다.
+              </p>
+            )}
+
+          {contentActors.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {contentActors.map((actor) => {
+                const selected = selectedActors.some(
+                  (selectedActor) => selectedActor.id === actor.id,
+                );
+
+                return (
+                  <button
+                    key={actor.id}
+                    type="button"
+                    onClick={() => handleToggleContentActor(actor)}
+                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                      selected
+                        ? "border-black bg-black text-white"
+                        : "border-gray-200 bg-white text-black"
+                    }`}
+                  >
+                    {actor.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedActors.length > 0 && (
+            <p className="mt-3 text-xs leading-5 text-gray-500">
+              {selectedActors.length}명 선택됨 · 선택한 배우 중 한 명 이상이
+              등장한 장면의 촬영지를 보여드립니다.
+            </p>
+          )}
+        </section>
+      )}
+
       {selectedContent && (
         <section className="mt-10">
           <div className="mb-4">
@@ -448,9 +715,14 @@ export default function ExplorePage() {
               {selectedContent.title} 촬영지
             </h2>
 
-            {selectedActor && (
+            {selectedActorNames.length > 0 ? (
+              <p className="mt-1 text-sm leading-6 text-gray-500">
+                {selectedActorNames.join(", ")}
+                이(가) 등장한 장면의 촬영지만 표시합니다.
+              </p>
+            ) : (
               <p className="mt-1 text-sm text-gray-500">
-                {selectedActor.name} 관련 촬영지를 우선 표시합니다.
+                작품의 전체 촬영지를 표시합니다.
               </p>
             )}
           </div>
@@ -466,54 +738,60 @@ export default function ExplorePage() {
           )}
 
           {!placesLoading && !placesError && places.length === 0 && (
-            <p className="text-sm text-gray-500">등록된 촬영지가 없습니다.</p>
+            <div className="rounded-2xl bg-gray-50 p-4">
+              <p className="text-sm font-medium">
+                조건에 맞는 촬영지가 없습니다.
+              </p>
+
+              {selectedActorNames.length > 0 && (
+                <p className="mt-1 text-sm leading-6 text-gray-500">
+                  다른 배우를 선택하거나 배우 선택을 모두 해제하면 더 많은
+                  촬영지를 확인할 수 있습니다.
+                </p>
+              )}
+            </div>
           )}
 
           {!placesLoading && !placesError && places.length > 0 && (
             <div className="space-y-3">
-              {places.map((relation) => {
-                const actorMatch =
-                  selectedActor && relation.actor_id === selectedActor.id;
+              {places.map((relation) => (
+                <article
+                  key={relation.id}
+                  className="rounded-2xl border border-gray-200 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold">{relation.places.name}</p>
 
-                return (
-                  <article
-                    key={relation.id}
-                    className="rounded-2xl border border-gray-200 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-semibold">{relation.places.name}</p>
-
-                      {actorMatch && (
-                        <span className="shrink-0 rounded-full bg-black px-2 py-1 text-xs text-white">
-                          배우 관련
-                        </span>
-                      )}
-                    </div>
-
-                    {relation.places.address && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        {relation.places.address}
-                      </p>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full bg-gray-100 px-2 py-1">
-                        {relation.relation_type}
+                    {relation.isActorScenePlace && (
+                      <span className="shrink-0 rounded-full bg-black px-2 py-1 text-xs text-white">
+                        배우 등장 장면
                       </span>
-
-                      <span className="rounded-full bg-gray-100 px-2 py-1">
-                        {relation.verification_status}
-                      </span>
-                    </div>
-
-                    {relation.verified_fact && (
-                      <p className="mt-3 text-sm leading-6 text-gray-700">
-                        {relation.verified_fact}
-                      </p>
                     )}
-                  </article>
-                );
-              })}
+                  </div>
+
+                  {relation.places.address && (
+                    <p className="mt-1 text-sm text-gray-500">
+                      {relation.places.address}
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full bg-gray-100 px-2 py-1">
+                      {relation.relation_type}
+                    </span>
+
+                    <span className="rounded-full bg-gray-100 px-2 py-1">
+                      {relation.verification_status}
+                    </span>
+                  </div>
+
+                  {relation.verified_fact && (
+                    <p className="mt-3 text-sm leading-6 text-gray-700">
+                      {relation.verified_fact}
+                    </p>
+                  )}
+                </article>
+              ))}
             </div>
           )}
 
@@ -523,7 +801,7 @@ export default function ExplorePage() {
               onClick={handleStartPlanning}
               className="mt-6 w-full rounded-2xl bg-black py-4 font-semibold text-white"
             >
-              이 작품으로 여행하기
+              이 조건으로 여행하기
             </button>
           )}
         </section>

@@ -19,12 +19,39 @@ type Place = {
 
 type PlaceRelation = {
   id: number;
-  actor_id: number | null;
   relation_type: string;
   verification_status: string;
   verified_fact: string | null;
   places: Place;
 };
+
+type SceneActor = {
+  scene_id: number;
+};
+
+type Scene = {
+  id: number;
+};
+
+type ScenePlace = {
+  scene_id: number;
+  place_id: number;
+};
+
+function parseActorIds(actorIdsParam: string | null): number[] {
+  if (!actorIdsParam) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      actorIdsParam
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  );
+}
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
@@ -41,18 +68,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const actorIdParam = request.nextUrl.searchParams.get("actorId");
+    const actorIdsParam = request.nextUrl.searchParams.get("actorIds");
 
-    const actorId = actorIdParam ? Number(actorIdParam) : null;
-
-    if (actorId !== null && (!Number.isInteger(actorId) || actorId <= 0)) {
-      return NextResponse.json(
-        {
-          message: "잘못된 배우 ID입니다.",
-        },
-        { status: 400 },
-      );
-    }
+    const actorIds = parseActorIds(actorIdsParam);
 
     const supabase = createServerSupabaseClient();
 
@@ -61,7 +79,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       .select(
         `
         id,
-        actor_id,
         relation_type,
         verification_status,
         verified_fact,
@@ -91,59 +108,140 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const relations = (data ?? []) as unknown as PlaceRelation[];
 
-    const activePlaces = relations.filter(
+    const activeRelations = relations.filter(
       (relation) => relation.places.is_active !== false,
     );
 
     /**
-     * 같은 장소에 여러 relation이 존재할 경우:
-     *
-     * 배우가 선택되어 있다면
-     * 해당 배우와 직접 연결된 relation을 우선해서 남긴다.
+     * 배우를 선택하지 않은 경우
+     * 작품 전체 촬영지를 반환한다.
      */
-    const placeMap = new Map<number, PlaceRelation>();
+    if (actorIds.length === 0) {
+      const uniquePlaces = Array.from(
+        new Map(
+          activeRelations.map((relation) => [relation.places.id, relation]),
+        ).values(),
+      );
 
-    for (const relation of activePlaces) {
-      const placeId = relation.places.id;
-      const existing = placeMap.get(placeId);
-
-      if (!existing) {
-        placeMap.set(placeId, relation);
-        continue;
-      }
-
-      const currentActorMatch =
-        actorId !== null && relation.actor_id === actorId;
-
-      const existingActorMatch =
-        actorId !== null && existing.actor_id === actorId;
-
-      if (currentActorMatch && !existingActorMatch) {
-        placeMap.set(placeId, relation);
-      }
-    }
-
-    const uniquePlaces = Array.from(placeMap.values());
-
-    /**
-     * 배우가 선택된 경우:
-     * 배우와 직접 연결된 촬영지를 먼저 표시한다.
-     */
-    if (actorId !== null) {
-      uniquePlaces.sort((a, b) => {
-        const aActorMatch = a.actor_id === actorId ? 1 : 0;
-
-        const bActorMatch = b.actor_id === actorId ? 1 : 0;
-
-        return bActorMatch - aActorMatch;
+      return NextResponse.json({
+        data: uniquePlaces.map((relation) => ({
+          ...relation,
+          isActorScenePlace: false,
+        })),
       });
     }
 
+    /**
+     * 선택 배우 중 한 명 이상이 등장한 Scene 조회.
+     *
+     * OR 조건:
+     * actor A OR actor B OR actor C
+     */
+    const { data: sceneActorData, error: sceneActorError } = await supabase
+      .from("scene_actors")
+      .select("scene_id")
+      .in("actor_id", actorIds);
+
+    if (sceneActorError) {
+      console.error("Failed to fetch actor scenes:", sceneActorError);
+
+      return NextResponse.json(
+        {
+          message: "배우의 장면 정보를 불러오지 못했습니다.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const actorSceneIds = Array.from(
+      new Set(
+        ((sceneActorData ?? []) as SceneActor[]).map((row) => row.scene_id),
+      ),
+    );
+
+    if (actorSceneIds.length === 0) {
+      return NextResponse.json({
+        data: [],
+      });
+    }
+
+    /**
+     * 배우가 등장한 Scene 중
+     * 현재 작품에 속하는 Scene만 남긴다.
+     */
+    const { data: sceneData, error: sceneError } = await supabase
+      .from("scenes")
+      .select("id")
+      .eq("content_id", parsedContentId)
+      .in("id", actorSceneIds);
+
+    if (sceneError) {
+      console.error("Failed to fetch content scenes:", sceneError);
+
+      return NextResponse.json(
+        {
+          message: "작품의 장면 정보를 불러오지 못했습니다.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const contentActorSceneIds = ((sceneData ?? []) as Scene[]).map(
+      (scene) => scene.id,
+    );
+
+    if (contentActorSceneIds.length === 0) {
+      return NextResponse.json({
+        data: [],
+      });
+    }
+
+    /**
+     * 해당 Scene이 촬영된 Place 조회.
+     */
+    const { data: scenePlaceData, error: scenePlaceError } = await supabase
+      .from("scene_places")
+      .select(
+        `
+        scene_id,
+        place_id
+      `,
+      )
+      .in("scene_id", contentActorSceneIds);
+
+    if (scenePlaceError) {
+      console.error("Failed to fetch scene places:", scenePlaceError);
+
+      return NextResponse.json(
+        {
+          message: "장면의 촬영지 정보를 불러오지 못했습니다.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const scenePlaces = (scenePlaceData ?? []) as ScenePlace[];
+
+    const actorPlaceIds = new Set(scenePlaces.map((row) => row.place_id));
+
+    const actorSceneRelations = activeRelations.filter((relation) =>
+      actorPlaceIds.has(relation.places.id),
+    );
+
+    const uniqueActorPlaces = Array.from(
+      new Map(
+        actorSceneRelations.map((relation) => [relation.places.id, relation]),
+      ).values(),
+    );
+
     return NextResponse.json({
-      data: uniquePlaces,
+      data: uniqueActorPlaces.map((relation) => ({
+        ...relation,
+        isActorScenePlace: true,
+      })),
     });
   } catch (error) {
-    console.error("Unexpected server error:", error);
+    console.error("Unexpected content places error:", error);
 
     return NextResponse.json(
       {

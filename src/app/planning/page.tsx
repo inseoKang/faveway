@@ -43,30 +43,63 @@ const walkingOptions = [
 
 type PlanningInput = {
   contentId: number;
-  actorId: number | null;
+  actorIds: number[];
   durationMinutes: number;
   maxWalkingMinutes: number | null;
 };
 
+function parseActorIds(actorIdsParam: string | null): number[] {
+  if (!actorIdsParam) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      actorIdsParam
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  );
+}
+
 function PlanningContent() {
   const router = useRouter();
+
   const searchParams = useSearchParams();
 
   const contentId = searchParams.get("contentId");
+
   const contentTitle = searchParams.get("title");
 
-  const actorId = searchParams.get("actorId");
-  const actorName = searchParams.get("actorName");
+  const actorIdsParam = searchParams.get("actorIds");
+
+  const actorNamesParam = searchParams.get("actorNames");
+
+  const actorIds = parseActorIds(actorIdsParam);
+
+  const actorNames = actorNamesParam
+    ? actorNamesParam
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean)
+    : [];
 
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
-  // undefined = 아직 선택하지 않음
-  // null = "상관없음" 선택
+  /**
+   * undefined
+   * = 아직 선택하지 않음
+   *
+   * null
+   * = 제한 없음 선택
+   */
   const [maxWalkingMinutes, setMaxWalkingMinutes] = useState<
     number | null | undefined
   >(undefined);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [error, setError] = useState("");
 
   async function handleCreateCourse() {
@@ -75,25 +108,25 @@ function PlanningContent() {
     }
 
     const parsedContentId = Number(contentId);
-    const parsedActorId = actorId ? Number(actorId) : null;
 
     if (!Number.isInteger(parsedContentId) || parsedContentId <= 0) {
       setError("잘못된 작품 정보입니다.");
-      return;
-    }
 
-    if (
-      parsedActorId !== null &&
-      (!Number.isInteger(parsedActorId) || parsedActorId <= 0)
-    ) {
-      setError("잘못된 배우 정보입니다.");
       return;
     }
 
     const planningInput: PlanningInput = {
       contentId: parsedContentId,
-      actorId: parsedActorId,
+
+      /**
+       * 중요:
+       * Explore에서 전달된 actorIds를
+       * 그대로 Trip API에 전달한다.
+       */
+      actorIds,
+
       durationMinutes,
+
       maxWalkingMinutes,
     };
 
@@ -103,9 +136,11 @@ function PlanningContent() {
 
       const response = await fetch("/api/trips", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify(planningInput),
       });
 
@@ -122,8 +157,8 @@ function PlanningContent() {
         title: contentTitle ?? "",
       });
 
-      if (actorName) {
-        params.set("actorName", actorName);
+      if (actorNames.length > 0) {
+        params.set("actorNames", actorNames.join(","));
       }
 
       router.push(`/course?${params.toString()}`);
@@ -151,8 +186,30 @@ function PlanningContent() {
           </p>
         )}
 
-        {actorName && (
-          <p className="mt-1 text-sm text-gray-500">선택한 배우: {actorName}</p>
+        {actorNames.length > 0 ? (
+          <div className="mt-2">
+            <p className="text-sm text-gray-500">선택한 배우</p>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              {actorNames.map((actorName) => (
+                <span
+                  key={actorName}
+                  className="rounded-full bg-gray-100 px-3 py-1 text-sm"
+                >
+                  {actorName}
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-2 text-xs leading-5 text-gray-500">
+              선택한 배우 중 한 명 이상이 등장한 장면의 촬영지를 기준으로 코스를
+              생성합니다.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-gray-500">
+            배우 선택 없음 · 작품 전체 촬영지를 기준으로 코스를 생성합니다.
+          </p>
         )}
       </header>
 
