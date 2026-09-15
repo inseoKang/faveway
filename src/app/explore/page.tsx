@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Content = {
   id: number;
@@ -29,6 +30,8 @@ type PlaceRelation = {
 };
 
 export default function ExplorePage() {
+  const router = useRouter();
+
   const [contents, setContents] = useState<Content[]>([]);
   const [selectedContent, setSelectedContent] = useState<Content | null>(null);
 
@@ -96,6 +99,18 @@ export default function ExplorePage() {
     }
   }
 
+  function handleStartPlanning() {
+    if (!selectedContent) {
+      return;
+    }
+
+    router.push(
+      `/planning?contentId=${selectedContent.id}&title=${encodeURIComponent(
+        selectedContent.title,
+      )}`,
+    );
+  }
+
   if (contentsLoading) {
     return <main className="p-6">콘텐츠를 불러오는 중...</main>;
   }
@@ -112,19 +127,16 @@ export default function ExplorePage() {
         </h1>
       </header>
 
-      {/* 콘텐츠 조회 오류 */}
       {contentsError && (
         <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
           {contentsError}
         </p>
       )}
 
-      {/* 콘텐츠가 하나도 없는 경우 */}
       {!contentsError && contents.length === 0 && (
         <p className="text-sm text-gray-500">등록된 콘텐츠가 없습니다.</p>
       )}
 
-      {/* 콘텐츠 목록 */}
       <section className="space-y-3">
         {contents.map((content) => {
           const selected = selectedContent?.id === content.id;
@@ -150,7 +162,6 @@ export default function ExplorePage() {
         })}
       </section>
 
-      {/* 선택한 작품의 촬영지 */}
       {selectedContent && (
         <section className="mt-10">
           <div className="mb-4">
@@ -161,24 +172,20 @@ export default function ExplorePage() {
             </h2>
           </div>
 
-          {/* 촬영지 로딩 */}
           {placesLoading && (
             <p className="text-sm text-gray-500">촬영지를 불러오는 중...</p>
           )}
 
-          {/* 촬영지 오류 */}
           {!placesLoading && placesError && (
             <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">
               {placesError}
             </p>
           )}
 
-          {/* 촬영지 없음 */}
           {!placesLoading && !placesError && places.length === 0 && (
             <p className="text-sm text-gray-500">등록된 촬영지가 없습니다.</p>
           )}
 
-          {/* 촬영지 목록 */}
           {!placesLoading && !placesError && places.length > 0 && (
             <div className="space-y-3">
               {places.map((relation) => (
@@ -212,6 +219,16 @@ export default function ExplorePage() {
                 </article>
               ))}
             </div>
+          )}
+
+          {!placesLoading && !placesError && places.length > 0 && (
+            <button
+              type="button"
+              onClick={handleStartPlanning}
+              className="mt-6 w-full rounded-2xl bg-black py-4 font-semibold text-white"
+            >
+              이 작품으로 여행하기
+            </button>
           )}
         </section>
       )}
