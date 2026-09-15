@@ -14,7 +14,7 @@ FAVEWAY는 사용자가 좋아하는 **드라마·영화·배우**를 선택하�
 
 좋아하는 드라마나 영화의 촬영지를 직접 찾아 여행하려면 여러 검색 결과를 비교하고, 장소를 정리한 뒤 다시 이동 동선을 구성해야 합니다.
 
-특히 특정 배우를 중심으로 여행하고 싶다면 단순히 해당 배우가 출연한 작품의 촬영지를 모두 보여주는 것만으로는 충분하지 않습니다.
+특히 특정 배우를 중심으로 여행하고 싶다면 단순히 해당 배우가 출연한 작품의 모든 촬영지를 보여주는 것만으로는 충분하지 않습니다.
 
 같은 작품 안에서도 배우가 등장하지 않은 장면의 촬영지가 많기 때문입니다.
 
@@ -36,14 +36,16 @@ Actor
 
 관계를 이용합니다.
 
-작품까지 포함하면:
+작품과 배우 선택을 함께 고려하면:
 
 ```text
-Actor + Content
+Content
++
+Selected Actors
 ↓
 선택 작품의 Scene
 ↓
-선택 Actor가 등장한 Scene
+선택 배우 중 한 명 이상이 등장한 Scene
 ↓
 Scene과 연결된 Place
 ```
@@ -54,8 +56,8 @@ Scene과 연결된 Place
 
 ```text
 콘텐츠 / 배우 탐색
-→ 배우 선택 시 출연 작품 조회
 → 작품 선택
+→ 출연 배우 선택
 → Actor → Scene → Place 기반 촬영지 조회
 → 여행 조건 입력
 → 방문 가능한 Course 생성
@@ -104,14 +106,26 @@ Scene C
 → 촬영지 C
 ```
 
-사용자가 `공유`를 선택했다면 FAVEWAY에서는:
+사용자가 `공유`를 선택했다면:
 
 ```text
 촬영지 A
 촬영지 C
 ```
 
-처럼 **공유가 실제 등장한 Scene과 연결된 Place만 Candidate로 사용**합니다.
+를 Candidate로 사용합니다.
+
+사용자가 `공유 + 김고은`을 선택했다면:
+
+```text
+공유 등장 Scene
+UNION
+김고은 등장 Scene
+```
+
+의 촬영지를 Candidate로 사용합니다.
+
+즉 여러 배우를 선택한 경우 **선택한 배우 중 한 명 이상이 등장한 Scene을 OR 조건으로 조회**합니다.
 
 ---
 
@@ -167,7 +181,7 @@ AI에게 촬영지 자체를 생성하도록 하지 않습니다.
 현재 구현된 Recommendation Pipeline은 다음과 같습니다.
 
 ```text
-Actor / Content Selection
+Content / Actor Selection
 ↓
 Scene Retrieval
 ↓
@@ -176,6 +190,8 @@ Actor Scene Filtering
 Scene → Place Mapping
 ↓
 Active Place Filter
+↓
+Deduplication
 ↓
 Coordinate Filter
 ↓
@@ -224,15 +240,64 @@ Course
 배우로 찾기
 ```
 
-### 작품 기준
+---
+
+## 작품으로 찾기
 
 ```text
 작품 선택
 ↓
-작품의 전체 촬영지 조회
+출연 배우 목록 조회
+↓
+배우 0명 ~ 여러 명 선택
 ```
 
-### 배우 기준
+배우를 선택하지 않으면:
+
+```text
+actorIds = []
+↓
+작품 전체 촬영지
+```
+
+한 명 이상 선택하면:
+
+```text
+actorIds = [actorA, actorB, ...]
+↓
+선택 배우 중 한 명 이상이 등장한 Scene
+↓
+해당 Scene의 촬영지
+```
+
+를 조회합니다.
+
+예:
+
+```text
+도깨비
+↓
+[공유] [김고은] [이동욱] [유인나]
+```
+
+여기서:
+
+```text
+아무도 선택하지 않음
+→ 도깨비 전체 촬영지
+
+공유
+→ 공유 등장 Scene 촬영지
+
+공유 + 이동욱
+→ 공유 또는 이동욱 등장 Scene 촬영지
+```
+
+로 동작합니다.
+
+---
+
+## 배우로 찾기
 
 ```text
 배우 이름 검색
@@ -252,56 +317,89 @@ Course
 
 ---
 
-# 배우 기반 촬영지 필터링
+# 작품 출연 배우 조회
 
-배우가 선택된 경우 단순히 작품 촬영지를 우선 정렬하는 것이 아니라 **실제 Scene 관계를 따라 Candidate 자체를 제한합니다.**
+작품을 먼저 선택한 경우 `content_actors` 관계를 이용해 해당 작품의 출연 배우를 조회합니다.
 
 ```text
-Actor
+Content
+↓
+content_actors
+↓
+Actors
+```
+
+API:
+
+```text
+GET /api/contents/:contentId/actors
+```
+
+작품 화면에서는 조회된 배우 중:
+
+```text
+0명
+1명
+여러 명
+전부
+```
+
+선택할 수 있습니다.
+
+실제 API 전달 구조에서는 선택 배우를 `actorIds` 배열로 관리합니다.
+
+---
+
+# 배우 기반 촬영지 필터링
+
+배우가 한 명 이상 선택된 경우 단순히 작품 촬영지를 정렬하는 것이 아니라 **Scene 관계를 따라 Candidate 자체를 제한**합니다.
+
+```text
+Selected Actors
 ↓
 scene_actors
 ↓
-Scene
+Scenes
+↓
+Content Filter
 ↓
 scene_places
 ↓
-Place
+Places
 ```
 
-작품 조건까지 포함하면:
+여러 배우가 선택되면 OR 조건을 사용합니다.
 
 ```text
-Actor
-+
-Content
+Actor A Scene
+UNION
+Actor B Scene
+UNION
+Actor C Scene
 ↓
-해당 작품의 Scene
-↓
-선택 Actor가 등장한 Scene
-↓
-Scene과 연결된 Place
+Place
 ```
 
 예:
 
 ```text
-Actor   : 공유
 Content : 도깨비
+Actors  : 육성재, 이동욱
 ```
 
-처리:
+이라면:
 
 ```text
-도깨비 Scene 조회
+육성재가 등장한 Scene
++
+이동욱이 등장한 Scene
 ↓
-공유가 등장한 Scene만 Filter
-↓
-해당 Scene과 연결된 Place 조회
-↓
-Course Candidate
+Scene Place 합집합
 ```
 
-따라서 배우가 선택된 경우 **배우가 실제 등장한 것으로 확인된 촬영지만 Course 후보가 됩니다.**
+만 Course Candidate로 사용합니다.
+
+따라서 배우를 선택한 상태에서 여행 시간이 길어져도 **선택 배우와 관계없는 작품 촬영지가 임의로 추가되지 않습니다.**
 
 ---
 
@@ -319,12 +417,25 @@ Course Candidate
 
 중 하나를 선택합니다.
 
-여행 시간에 따라 최대 방문 장소 수도 달라집니다.
+여행 시간에 따라 최대 방문 장소 수가 달라집니다.
 
 ```text
 3시간 → 최대 2곳
 4시간 → 최대 3곳
 5시간 → 최대 4곳
+```
+
+실제 Candidate 수가 최대 방문 장소 수보다 적으면 Candidate 수를 초과해서 장소를 추가하지 않습니다.
+
+예:
+
+```text
+Candidate = 2곳
+
+5시간 선택
+→ 최대 4곳 방문 가능
+→ 실제 Candidate는 2곳
+→ Course도 최대 2곳
 ```
 
 ---
@@ -358,7 +469,7 @@ B → C = 17분
 
 # 촬영지 Candidate 조회
 
-## 작품만 선택한 경우
+## 배우를 선택하지 않은 경우
 
 ```text
 작품과 연결된 촬영지
@@ -372,14 +483,16 @@ is_active = true
 
 ---
 
-## 작품 + 배우를 선택한 경우
+## 배우를 한 명 이상 선택한 경우
 
 ```text
-선택 작품의 Scene
+선택 작품
 ↓
-선택 배우가 등장한 Scene
+선택 배우 중 한 명 이상이 등장한 Scene
 ↓
 해당 Scene과 연결된 Place
+↓
+작품 촬영지와 일치하는 Place
 ↓
 is_active = true
 ↓
@@ -397,7 +510,7 @@ is_active = true
 이 아니라:
 
 ```text
-배우가 실제 등장한 Scene의 촬영지만 사용
+배우가 실제 등장한 Scene의 촬영지만 Candidate로 사용
 ```
 
 하는 구조입니다.
@@ -413,8 +526,8 @@ is_active = true
 ```text
 1. 작품 기준 DB Candidate 조회
 
-2. 배우가 선택된 경우
-   Actor → Scene → Place 기반 Candidate Filter
+2. actorIds가 비어 있지 않은 경우
+   선택 배우 → Scene → Place 기반 Candidate Filter
 
 3. 비활성 장소 제외
 
@@ -424,7 +537,7 @@ is_active = true
 
 6. 여행 시간에 따라 최대 방문 장소 수 결정
 
-7. 가능한 장소 조합 및 방문 순서 생성
+7. 가능한 장소 조합과 방문 순서 생성
 
 8. 장소 간 거리 계산
 
@@ -448,6 +561,8 @@ is_active = true
 ## 작품만 선택한 경우
 
 ```text
+actorIds = []
+
 1. 최대 도보 시간 만족
 2. 전체 여행 가능 시간 만족
 3. 가능한 최대 장소 수 확보
@@ -456,19 +571,21 @@ is_active = true
 
 ---
 
-## 배우 + 작품 선택
+## 배우를 한 명 이상 선택한 경우
 
-배우가 선택된 경우에는 Candidate 자체가 이미:
+Candidate 자체가 이미:
 
 ```text
-선택 배우가 실제 등장한 Scene의 Place
+선택 배우 중 한 명 이상이 등장한 Scene의 Place
 ```
 
 로 제한되어 있습니다.
 
-따라서 Course 선택은:
+따라서:
 
 ```text
+actorIds = [3, 5, ...]
+
 1. Actor → Scene → Place 조건 만족
 2. 최대 도보 시간 만족
 3. 전체 여행 가능 시간 만족
@@ -476,7 +593,7 @@ is_active = true
 5. 총 이동거리 최소화
 ```
 
-순으로 이루어집니다.
+순으로 Course를 구성합니다.
 
 ---
 
@@ -510,7 +627,7 @@ Place B
 예상 도보 시간
 ```
 
-> 현재 이동거리 및 도보 시간은 실제 지도 경로가 아닌 추정값입니다.
+> 현재 이동거리와 도보 시간은 실제 지도 경로가 아닌 추정값입니다.
 
 향후 Kakao Map 기반 실제 이동 경로를 사용하도록 개선할 예정입니다.
 
@@ -518,7 +635,7 @@ Place B
 
 # 체류 시간
 
-`stayMinutes`는 장소 사이의 이동 시간이 아니라 **해당 장소에서 머무르는 예상 시간**입니다.
+`stayMinutes`는 장소 사이 이동 시간이 아니라 **해당 장소에서 머무르는 예상 시간**입니다.
 
 ```text
 전체 여행 가능 시간
@@ -560,7 +677,7 @@ Scene
 Place
 ```
 
-실제 배우 기반 촬영지 검색에서는:
+배우 기반 촬영지 검색에서는:
 
 ```text
 actors
@@ -576,17 +693,17 @@ places
 
 관계를 사용합니다.
 
-작품 출연 관계는:
+작품의 출연 배우 조회에는:
 
 ```text
-actors
+contents
 ↓
 content_actors
 ↓
-contents
+actors
 ```
 
-를 통해 관리합니다.
+관계를 사용합니다.
 
 주요 테이블:
 
@@ -641,7 +758,7 @@ description
 
 ## `content_actors`
 
-배우와 출연 작품의 관계를 관리합니다.
+배우와 작품의 출연 관계를 관리합니다.
 
 ```text
 actor_id
@@ -651,9 +768,11 @@ content_id
 사용:
 
 ```text
-Actor
-→ 출연 작품 조회
+Actor → Content
+Content → Actors
 ```
+
+양방향 탐색에 활용합니다.
 
 ---
 
@@ -721,7 +840,7 @@ verification_status
 verified_fact
 ```
 
-Course Candidate의 기본 장소 정보와 검증 상태를 조회할 때 사용합니다.
+작품의 기본 촬영지 Candidate 및 검증 정보를 조회할 때 사용합니다.
 
 ---
 
@@ -733,13 +852,9 @@ FAVEWAY에서는 모든 장소 데이터를 동일하게 취급하지 않습니�
 
 공공기관 데이터에서 작품과 장소 관계를 확인한 데이터입니다.
 
----
-
 ## `FAVEWAY_VERIFIED`
 
-공식 자료나 신뢰 가능한 출처를 추가로 확인해 작품·장면·배우 관계 등을 검증한 데이터입니다.
-
----
+공식 자료나 신뢰 가능한 출처를 추가로 확인하여 작품·Scene·배우 관계 등을 검증한 데이터입니다.
 
 ## `DISCOVERY`
 
@@ -790,9 +905,11 @@ GET    /api/actors/search?q=
 
 GET    /api/actors/:actorId/contents
 
+GET    /api/contents/:contentId/actors
+
 GET    /api/contents/:contentId/places
 
-GET    /api/contents/:contentId/places?actorId=
+GET    /api/contents/:contentId/places?actorIds=3,5
 
 POST   /api/trips
 ```
@@ -831,9 +948,25 @@ Content
 
 ---
 
+# `GET /api/contents/:contentId/actors`
+
+선택한 작품의 출연 배우를 조회합니다.
+
+```text
+Content
+↓
+content_actors
+↓
+Actors
+```
+
+이 결과를 이용해 작품 기준 탐색에서 배우를 0명~여러 명 선택할 수 있습니다.
+
+---
+
 # `GET /api/contents/:contentId/places`
 
-작품만 선택한 경우 작품의 전체 촬영지를 조회합니다.
+배우를 선택하지 않은 경우 작품 전체 촬영지를 조회합니다.
 
 ```text
 Content
@@ -845,12 +978,22 @@ Place
 
 ---
 
-# `GET /api/contents/:contentId/places?actorId=`
+# `GET /api/contents/:contentId/places?actorIds=`
 
-배우가 함께 선택된 경우:
+복수 배우 선택을 지원합니다.
+
+예:
 
 ```text
-Actor
+/api/contents/1/places?actorIds=3,5
+```
+
+처리:
+
+```text
+actor_id = 3
+OR
+actor_id = 5
 ↓
 scene_actors
 ↓
@@ -863,9 +1006,7 @@ scene_places
 Place
 ```
 
-관계를 이용합니다.
-
-즉 선택 배우가 **실제 등장한 Scene과 연결된 Place만 반환**합니다.
+즉 선택 배우 중 **한 명 이상이 실제 등장한 Scene과 연결된 Place만 반환**합니다.
 
 ---
 
@@ -873,27 +1014,40 @@ Place
 
 현재 규칙 기반 여행 Course를 생성합니다.
 
-## Request
+## 배우 여러 명 선택
 
 ```json
 {
   "contentId": 1,
-  "actorId": 3,
+  "actorIds": [3, 5],
   "durationMinutes": 240,
   "maxWalkingMinutes": 20
 }
 ```
 
-작품만 선택한 경우:
+## 배우 한 명 선택
 
 ```json
 {
   "contentId": 1,
-  "actorId": null,
+  "actorIds": [3],
+  "durationMinutes": 240,
+  "maxWalkingMinutes": 20
+}
+```
+
+## 배우 미선택
+
+```json
+{
+  "contentId": 1,
+  "actorIds": [],
   "durationMinutes": 240,
   "maxWalkingMinutes": null
 }
 ```
+
+`actorIds = []`은 작품 전체 촬영지를 사용한다는 의미입니다.
 
 `maxWalkingMinutes = null`은 한 구간 도보 시간에 제한을 두지 않는다는 의미입니다.
 
@@ -902,13 +1056,17 @@ Place
 # Course 생성 Pipeline
 
 ```text
-Actor / Content Selection
+Content / Actor Selection
+↓
+Actor IDs
 ↓
 Scene Retrieval
 ↓
 Actor Scene Filtering
 ↓
 Scene → Place Mapping
+↓
+Content Place Validation
 ↓
 Active Place Filter
 ↓
@@ -963,7 +1121,7 @@ Course
 {
   "preference": {
     "content": "도깨비",
-    "actor": "공유"
+    "actors": ["공유", "이동욱"]
   },
   "durationMinutes": 240,
   "maxWalkingMinutes": 20,
@@ -1023,7 +1181,7 @@ Candidate에 존재하지 않는 `placeId`는 유효하지 않은 결과로 처�
 예:
 
 ```text
-선택한 배우가 실제 등장한 장면의 촬영 장소이며,
+선택한 배우 중 한 명 이상이 실제 등장한 장면의 촬영 장소이며,
 다른 촬영지와의 이동 거리와 여행 가능 시간을 고려해
 Course에 포함했습니다.
 ```
@@ -1039,7 +1197,7 @@ Place
 ↓
 Scene
 ↓
-Actor
+Actors
 ↓
 Content
 ↓
@@ -1083,7 +1241,7 @@ LLM Input:
 
 ```text
 작품
-배우
+선택 배우
 Scene
 회차
 장소
@@ -1153,6 +1311,7 @@ LLM 호출에 실패할 경우 DB에 저장된 기본 설명을 제공하는 Fal
 ## Current Recommendation
 
 - DB Candidate Retrieval
+- Multi Actor Selection
 - Actor → Scene → Place Filtering
 - Haversine Distance
 - Walking Time Estimation
@@ -1204,6 +1363,9 @@ faveway/
 │   │   │
 │   │   └── api/
 │   │       ├── contents/
+│   │       │   └── [contentId]/
+│   │       │       ├── actors/
+│   │       │       └── places/
 │   │       ├── actors/
 │   │       └── trips/
 │   │
@@ -1293,9 +1455,11 @@ EXPLORE
 ↓
 작품으로 찾기 / 배우로 찾기
 ↓
-배우 선택 시 출연 작품 조회
-↓
 작품 선택
+↓
+출연 배우 조회
+↓
+배우 0명 ~ 여러 명 선택
 ↓
 Actor → Scene → Place Candidate 조회
 ↓
@@ -1312,6 +1476,22 @@ COURSE
 체류 시간 / 이동 시간 확인
 ```
 
+배우로 찾기에서는:
+
+```text
+배우 검색
+↓
+배우 선택
+↓
+출연 작품 선택
+↓
+선택 배우 Scene 촬영지
+↓
+PLANNING
+```
+
+으로 연결됩니다.
+
 ---
 
 # Target MVP User Flow
@@ -1323,9 +1503,9 @@ HOME
 ↓
 EXPLORE
 ↓
-Actor / Content 선택
+Content / Actor 선택
 ↓
-배우 선택 시 Work 선택
+Actor Selection
 ↓
 Actor → Scene → Place Candidate Retrieval
 ↓
@@ -1348,6 +1528,8 @@ AI DOCENT
 드라마 또는 배우 선택
 ↓
 관련 작품 선택
+↓
+배우 0명 ~ 여러 명 선택
 ↓
 배우가 등장한 Scene 기반 실제 촬영지 조회
 ↓
@@ -1374,8 +1556,13 @@ AI Docent 생성
 - [ ] 콘텐츠 이름 검색
 - [x] 배우 이름 부분 검색
 - [x] 배우 출연 작품 조회
+- [x] 작품 출연 배우 조회
+- [x] 작품 기준 배우 0명 ~ 복수 선택
 - [x] 작품별 촬영지 조회
+- [x] 복수 배우 OR 조건 Scene 필터링
 - [x] 배우 등장 Scene 기반 촬영지 필터링
+- [x] 선택 배우 정보를 Planning까지 유지
+- [x] 선택 배우 정보를 Trip API까지 유지
 - [x] 여행 가능 시간 입력
 - [x] 한 구간 최대 도보 시간 입력
 - [x] 촬영지 좌표 기반 거리 계산
@@ -1393,9 +1580,11 @@ AI Docent 생성
 
 - [x] Actor 검색
 - [x] Actor → Content 조회
+- [x] Content → Actors 조회
 - [x] Content → Place 조회
 - [x] Actor → Scene 조회
 - [x] Scene → Place 조회
+- [x] Multi Actor → Scene 조회
 - [x] Actor → Content → Scene → Place Candidate 구성
 - [ ] Scene 상세 정보 UI
 - [ ] Episode 표시
@@ -1499,29 +1688,63 @@ Actor
 
 ---
 
-## 2. 배우 선택이 Candidate 자체를 변경
+## 2. 작품과 배우 양방향 탐색
 
-배우 선택을 UI 필터나 정렬 조건으로만 사용하지 않습니다.
+배우에서 작품을 찾는 흐름뿐만 아니라 작품에서 출연 배우를 다시 선택할 수 있습니다.
 
 ```text
-Actor Selection
+Actor
+→ Content
+```
+
+뿐 아니라:
+
+```text
+Content
+→ Actors
+```
+
+도 지원합니다.
+
+따라서 사용자는 자신의 탐색 방식에 따라:
+
+```text
+배우 → 작품
+```
+
+또는:
+
+```text
+작품 → 배우
+```
+
+로 여행을 시작할 수 있습니다.
+
+---
+
+## 3. 복수 배우 선택이 Candidate 자체를 변경
+
+배우 선택을 UI Filter로만 사용하지 않습니다.
+
+```text
+Selected Actor IDs
 ↓
 scene_actors
 ↓
-Actor Scene
+Scene UNION
 ↓
 scene_places
 ↓
-Actor Scene Place
+Places
 ↓
 Course Candidate
 ```
 
-즉 배우가 선택되면 **추천 대상 장소 집합 자체가 달라집니다.**
+즉 배우를 여러 명 선택하면 **선택 배우들의 실제 Scene 촬영지 합집합이 추천 대상 장소 집합**이 됩니다.
 
 ---
 
-## 3. 실제 여행 조건을 고려한 Route 생성
+## 4. 실제 여행 조건을 고려한 Route 생성
 
 단순 장소 추천이 아니라:
 
@@ -1539,13 +1762,13 @@ Course Candidate
 
 ---
 
-## 4. DB Candidate 기반 Recommendation Pipeline
+## 5. DB Candidate 기반 Recommendation Pipeline
 
 현재:
 
 ```text
 DB Candidate
-→ Actor Scene Filter
+→ Multi Actor Scene Filter
 → Route Combination
 → Distance Calculation
 → Walking Validation
@@ -1569,7 +1792,7 @@ DB Candidate
 
 ---
 
-## 5. AI Hallucination을 구조적으로 제한
+## 6. AI Hallucination을 구조적으로 제한
 
 향후 AI가 Course를 구성하더라도 Candidate에 존재하지 않는 장소를 추천할 수 없도록 합니다.
 
@@ -1587,14 +1810,14 @@ Candidate ID Validation
 
 ---
 
-## 6. 추천 근거를 사용자에게 제공
+## 7. 추천 근거를 사용자에게 제공
 
 최종적으로:
 
 ```text
 작품 관계
 Scene 관계
-배우 등장 여부
+선택 배우 등장 여부
 검증 상태
 추천 이유
 ```
@@ -1603,7 +1826,7 @@ Scene 관계
 
 ---
 
-## 7. 여행 계획에서 현장 콘텐츠 경험까지 연결
+## 8. 여행 계획에서 현장 콘텐츠 경험까지 연결
 
 FAVEWAY는 Course 생성에서 끝나지 않습니다.
 
@@ -1668,20 +1891,30 @@ Heuristic Routing
 
 # 배우 관련 촬영지 데이터가 부족한 경우
 
-현재 MVP에서는 정확성을 위해 배우를 선택했을 때 해당 배우가 등장한 Scene과 연결된 Place만 Candidate로 사용합니다.
+현재 MVP에서는 정확성을 위해 배우를 한 명 이상 선택했을 때 해당 배우 중 한 명 이상이 등장한 Scene과 연결된 Place만 Candidate로 사용합니다.
 
 데이터가 부족하다고 해서 일반 작품 촬영지를 자동으로 섞지 않습니다.
+
+예:
+
+```text
+선택 배우와 연결된 촬영지가 2곳뿐입니다.
+
+→ Course Candidate도 2곳
+```
+
+여행 가능 시간이 길다고 해서 작품의 다른 촬영지를 임의로 추가하지 않습니다.
 
 향후에는 사용자가 직접 범위를 확장할 수 있도록 구성할 예정입니다.
 
 예:
 
 ```text
-공유가 등장한 것으로 확인된 촬영지가 1곳뿐입니다.
+선택한 배우와 연결된 촬영지가 1곳뿐입니다.
 
 [배우 관련 촬영지만 보기]
 
-[도깨비 전체 촬영지까지 확장하기]
+[작품 전체 촬영지까지 확장하기]
 ```
 
 확장 후에는:
