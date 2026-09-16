@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import BackButton from "@/components/common/BackButton";
@@ -50,6 +50,9 @@ function CourseContent() {
   const searchParams = useSearchParams();
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
+
+  const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const rawData = searchParams.get("data");
   const title = searchParams.get("title");
@@ -92,6 +95,17 @@ function CourseContent() {
       ];
     });
   }, [course]);
+
+  function selectCourseStop(placeId: number) {
+    setSelectedPlaceId(placeId);
+
+    window.setTimeout(() => {
+      stopRefs.current[placeId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  }
 
   if (!rawData) {
     return (
@@ -172,23 +186,37 @@ function CourseContent() {
 
         {mapStops.length > 0 ? (
           <>
-            <CourseMap stops={mapStops} />
+            <CourseMap
+              stops={mapStops}
+              selectedPlaceId={selectedPlaceId}
+              onSelectPlace={selectCourseStop}
+            />
 
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-              {course.stops.map((stop) => (
-                <div
-                  key={`${stop.contentId}-${stop.placeId}`}
-                  className="flex shrink-0 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2"
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-                    {stop.order}
-                  </span>
+              {course.stops.map((stop) => {
+                const selected = selectedPlaceId === stop.placeId;
 
-                  <span className="max-w-40 truncate text-xs font-medium">
-                    {stop.place.name}
-                  </span>
-                </div>
-              ))}
+                return (
+                  <button
+                    key={`${stop.contentId}-${stop.placeId}`}
+                    type="button"
+                    onClick={() => selectCourseStop(stop.placeId)}
+                    className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 transition ${
+                      selected
+                        ? "border-indigo-600 bg-indigo-50"
+                        : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                      {stop.order}
+                    </span>
+
+                    <span className="max-w-40 truncate text-xs font-medium">
+                      {stop.place.name}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             <p className="mt-3 text-xs leading-5 text-gray-400">
@@ -214,22 +242,38 @@ function CourseContent() {
 
         {course.stops.map((stop, index) => {
           const nextStop = course.stops[index + 1];
+          const selected = selectedPlaceId === stop.placeId;
 
           return (
-            <div key={`${stop.contentId}-${stop.placeId}`}>
+            <div
+              key={`${stop.contentId}-${stop.placeId}`}
+              ref={(element) => {
+                stopRefs.current[stop.placeId] = element;
+              }}
+            >
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  setSelectedPlaceId(stop.placeId);
+
                   setDetailTarget({
                     contentId: stop.contentId,
                     place: stop.place,
-                  })
-                }
-                className="w-full rounded-2xl border border-gray-200 p-5 text-left transition hover:border-black"
+                  });
+                }}
+                className={`w-full rounded-2xl border p-5 text-left transition ${
+                  selected
+                    ? "border-indigo-600 bg-indigo-50 shadow-sm"
+                    : "border-gray-200 hover:border-black"
+                }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-gray-400">
+                    <p
+                      className={`text-sm font-semibold ${
+                        selected ? "text-indigo-600" : "text-gray-400"
+                      }`}
+                    >
                       {stop.order.toString().padStart(2, "0")}
                     </p>
 
@@ -242,7 +286,7 @@ function CourseContent() {
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-gray-50 px-3 py-2 text-right">
+                  <div className="rounded-xl bg-white/80 px-3 py-2 text-right">
                     <p className="text-xs text-gray-500">예상 체류</p>
 
                     <p className="mt-1 text-sm font-semibold">
@@ -258,7 +302,7 @@ function CourseContent() {
                 )}
 
                 {stop.verifiedFact && (
-                  <div className="mt-4 rounded-xl bg-gray-50 p-3">
+                  <div className="mt-4 rounded-xl bg-white/70 p-3">
                     <p className="text-xs font-medium text-gray-500">
                       촬영지 정보
                     </p>
