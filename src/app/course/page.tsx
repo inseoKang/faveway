@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
+import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 import { useSearchParams } from "next/navigation";
 
 type Place = {
@@ -36,6 +37,7 @@ type CourseData = {
 
 function CourseContent() {
   const searchParams = useSearchParams();
+  const [detailPlace, setDetailPlace] = useState<Place | null>(null);
 
   const rawData = searchParams.get("data");
   const contentTitle = searchParams.get("title");
@@ -114,7 +116,12 @@ function CourseContent() {
 
           return (
             <div key={stop.placeId}>
-              <article className="rounded-2xl border border-gray-200 p-5">
+              <button
+                type="button"
+                onClick={() => setDetailPlace(stop.place)}
+                aria-label={`${stop.place.name} 장소 설명 보기`}
+                className="w-full rounded-2xl border border-gray-200 p-5 text-left transition hover:border-stone-500 focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-500">
@@ -162,7 +169,10 @@ function CourseContent() {
                     </p>
                   </div>
                 )}
-              </article>
+                <span className="mt-4 block text-xs font-semibold text-stone-600">
+                  장면·장소 이야기 보기 ↗
+                </span>
+              </button>
 
               {nextStop && (
                 <div className="flex items-stretch px-5 py-3">
@@ -194,6 +204,15 @@ function CourseContent() {
         체류 시간은 전체 여행 가능 시간에서 예상 이동 시간을 제외한 뒤 각 장소에
         분배한 값입니다. 이동 시간은 장소와 장소 사이의 예상 도보 시간입니다.
       </div>
+      {detailPlace && (
+        <PlaceDetailDialog
+          key={`${course.contentId}/${detailPlace.id}`}
+          contentId={course.contentId}
+          placeId={detailPlace.id}
+          placeName={detailPlace.name}
+          onClose={() => setDetailPlace(null)}
+        />
+      )}
     </main>
   );
 }
