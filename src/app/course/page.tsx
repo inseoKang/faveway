@@ -7,6 +7,11 @@ import BackButton from "@/components/common/BackButton";
 import CourseMap from "@/components/map/CourseMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
+import {
+  calculateDistanceKm,
+  estimateWalkingMinutes,
+} from "@/lib/recommendation/distance";
+
 type Place = {
   id: number;
   name: string;
@@ -46,10 +51,94 @@ type DetailTarget = {
   place: Place;
 };
 
+function rebuildCourse(course: CourseData, stops: CourseStop[]): CourseData {
+  const recalculatedStops = stops.map((stop, index) => {
+    if (index === 0) {
+      return {
+        ...stop,
+        order: 1,
+        distanceFromPreviousKm: 0,
+        walkingMinutesFromPrevious: 0,
+      };
+    }
+
+    const previous = stops[index - 1];
+
+    const previousLatitude = previous.place.latitude;
+    const previousLongitude = previous.place.longitude;
+
+    const currentLatitude = stop.place.latitude;
+    const currentLongitude = stop.place.longitude;
+
+    if (
+      previousLatitude == null ||
+      previousLongitude == null ||
+      currentLatitude == null ||
+      currentLongitude == null
+    ) {
+      return {
+        ...stop,
+        order: index + 1,
+        distanceFromPreviousKm: 0,
+        walkingMinutesFromPrevious: 0,
+      };
+    }
+
+    const distanceKm = calculateDistanceKm(
+      {
+        latitude: previousLatitude,
+        longitude: previousLongitude,
+      },
+      {
+        latitude: currentLatitude,
+        longitude: currentLongitude,
+      },
+    );
+
+    return {
+      ...stop,
+      order: index + 1,
+      distanceFromPreviousKm: Number(distanceKm.toFixed(2)),
+      walkingMinutesFromPrevious: estimateWalkingMinutes(distanceKm),
+    };
+  });
+
+  const totalWalkingMinutes = recalculatedStops.reduce(
+    (sum, stop) => sum + stop.walkingMinutesFromPrevious,
+    0,
+  );
+
+  const totalDistanceKm = recalculatedStops.reduce(
+    (sum, stop) => sum + stop.distanceFromPreviousKm,
+    0,
+  );
+
+  const availableStayMinutes = Math.max(
+    course.durationMinutes - totalWalkingMinutes,
+    0,
+  );
+
+  const stayMinutes =
+    recalculatedStops.length > 0
+      ? Math.floor(availableStayMinutes / recalculatedStops.length)
+      : 0;
+
+  return {
+    ...course,
+    totalDistanceKm: Number(totalDistanceKm.toFixed(2)),
+    totalWalkingMinutes,
+    stops: recalculatedStops.map((stop) => ({
+      ...stop,
+      stayMinutes,
+    })),
+  };
+}
+
 function CourseContent() {
   const searchParams = useSearchParams();
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
+
   const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
 
   const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -57,15 +146,19 @@ function CourseContent() {
   const rawData = searchParams.get("data");
   const title = searchParams.get("title");
 
-  let course: CourseData | null = null;
-
-  if (rawData) {
-    try {
-      course = JSON.parse(decodeURIComponent(rawData)) as CourseData;
-    } catch {
-      course = null;
+  const initialCourse = useMemo(() => {
+    if (!rawData) {
+      return null;
     }
-  }
+
+    try {
+      return JSON.parse(decodeURIComponent(rawData)) as CourseData;
+    } catch {
+      return null;
+    }
+  }, [rawData]);
+
+  const [course, setCourse] = useState<CourseData | null>(initialCourse);
 
   const mapStops = useMemo(() => {
     if (!course) {
@@ -105,6 +198,46 @@ function CourseContent() {
         block: "center",
       });
     }, 0);
+  }
+
+  function removeCourseStop(placeId: number) {
+    if (!course) {
+      return;
+    }
+
+    if (course.stops.length <= 1) {
+      window.alert("코스에는 최소 한 개의 장소가 필요합니다.");
+
+      return;
+    }
+
+    const target = course.stops.find((stop) => stop.placeId === placeId);
+
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${target.place.name}을(를) 코스에서 삭제할까요?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const nextStops = course.stops.filter((stop) => stop.placeId !== placeId);
+
+    const nextCourse = rebuildCourse(course, nextStops);
+
+    setCourse(nextCourse);
+
+    if (selectedPlaceId === placeId) {
+      setSelectedPlaceId(null);
+    }
+
+    if (detailTarget?.place.id === placeId) {
+      setDetailTarget(null);
+    }
   }
 
   if (!rawData) {
@@ -238,10 +371,15 @@ function CourseContent() {
           </p>
 
           <h2 className="mt-2 text-xl font-bold">이 순서로 만나보세요</h2>
+
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            필요하지 않은 장소는 코스에서 삭제할 수 있어요.
+          </p>
         </div>
 
         {course.stops.map((stop, index) => {
           const nextStop = course.stops[index + 1];
+
           const selected = selectedPlaceId === stop.placeId;
 
           return (
@@ -251,70 +389,85 @@ function CourseContent() {
                 stopRefs.current[stop.placeId] = element;
               }}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPlaceId(stop.placeId);
-
-                  setDetailTarget({
-                    contentId: stop.contentId,
-                    place: stop.place,
-                  });
-                }}
-                className={`w-full rounded-2xl border p-5 text-left transition ${
+              <div
+                className={`rounded-2xl border transition ${
                   selected
                     ? "border-indigo-600 bg-indigo-50 shadow-sm"
-                    : "border-gray-200 hover:border-black"
+                    : "border-gray-200 bg-white"
                 }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p
-                      className={`text-sm font-semibold ${
-                        selected ? "text-indigo-600" : "text-gray-400"
-                      }`}
-                    >
-                      {stop.order.toString().padStart(2, "0")}
-                    </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlaceId(stop.placeId);
 
-                    <h3 className="mt-1 text-lg font-bold">
-                      {stop.place.name}
-                    </h3>
+                    setDetailTarget({
+                      contentId: stop.contentId,
+                      place: stop.place,
+                    });
+                  }}
+                  className="w-full p-5 text-left"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          selected ? "text-indigo-600" : "text-gray-400"
+                        }`}
+                      >
+                        {stop.order.toString().padStart(2, "0")}
+                      </p>
 
-                    <p className="mt-1 text-xs text-gray-500">
-                      {stop.contentTitle}
-                    </p>
+                      <h3 className="mt-1 text-lg font-bold">
+                        {stop.place.name}
+                      </h3>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        {stop.contentTitle}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-white/80 px-3 py-2 text-right">
+                      <p className="text-xs text-gray-500">예상 체류</p>
+
+                      <p className="mt-1 text-sm font-semibold">
+                        약 {stop.stayMinutes}분
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="rounded-xl bg-white/80 px-3 py-2 text-right">
-                    <p className="text-xs text-gray-500">예상 체류</p>
-
-                    <p className="mt-1 text-sm font-semibold">
-                      약 {stop.stayMinutes}분
+                  {stop.place.address && (
+                    <p className="mt-4 text-sm leading-6 text-gray-500">
+                      {stop.place.address}
                     </p>
-                  </div>
+                  )}
+
+                  {stop.verifiedFact && (
+                    <div className="mt-4 rounded-xl bg-white/70 p-3">
+                      <p className="text-xs font-medium text-gray-500">
+                        촬영지 정보
+                      </p>
+
+                      <p className="mt-1 text-sm leading-6">
+                        {stop.verifiedFact}
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="mt-4 text-xs font-semibold">상세 보기 →</p>
+                </button>
+
+                <div className="border-t border-gray-100 px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => removeCourseStop(stop.placeId)}
+                    disabled={course.stops.length <= 1}
+                    className="text-xs font-semibold text-red-500 transition hover:text-red-700 disabled:cursor-not-allowed disabled:text-gray-300"
+                  >
+                    코스에서 삭제
+                  </button>
                 </div>
-
-                {stop.place.address && (
-                  <p className="mt-4 text-sm leading-6 text-gray-500">
-                    {stop.place.address}
-                  </p>
-                )}
-
-                {stop.verifiedFact && (
-                  <div className="mt-4 rounded-xl bg-white/70 p-3">
-                    <p className="text-xs font-medium text-gray-500">
-                      촬영지 정보
-                    </p>
-
-                    <p className="mt-1 text-sm leading-6">
-                      {stop.verifiedFact}
-                    </p>
-                  </div>
-                )}
-
-                <p className="mt-4 text-xs font-semibold">상세 보기 →</p>
-              </button>
+              </div>
 
               {nextStop && (
                 <div className="px-5 py-5">
@@ -326,7 +479,8 @@ function CourseContent() {
                     <p className="mt-1 text-sm font-medium">
                       예상 도보 {nextStop.walkingMinutesFromPrevious}분
                       <span className="mx-2 text-gray-300">·</span>
-                      {nextStop.distanceFromPreviousKm}km
+                      {nextStop.distanceFromPreviousKm}
+                      km
                     </p>
                   </div>
                 </div>
