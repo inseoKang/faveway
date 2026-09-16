@@ -240,6 +240,46 @@ function CourseContent() {
     }
   }
 
+  function moveCourseStop(placeId: number, direction: "UP" | "DOWN") {
+    if (!course) {
+      return;
+    }
+
+    const currentIndex = course.stops.findIndex(
+      (stop) => stop.placeId === placeId,
+    );
+
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const targetIndex =
+      direction === "UP" ? currentIndex - 1 : currentIndex + 1;
+
+    if (targetIndex < 0 || targetIndex >= course.stops.length) {
+      return;
+    }
+
+    const nextStops = [...course.stops];
+
+    [nextStops[currentIndex], nextStops[targetIndex]] = [
+      nextStops[targetIndex],
+      nextStops[currentIndex],
+    ];
+
+    const nextCourse = rebuildCourse(course, nextStops);
+
+    setCourse(nextCourse);
+    setSelectedPlaceId(placeId);
+
+    window.setTimeout(() => {
+      stopRefs.current[placeId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  }
+
   if (!rawData) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
@@ -373,7 +413,7 @@ function CourseContent() {
           <h2 className="mt-2 text-xl font-bold">이 순서로 만나보세요</h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-500">
-            필요하지 않은 장소는 코스에서 삭제할 수 있어요.
+            방문 순서를 조정하거나 필요하지 않은 장소를 삭제할 수 있어요.
           </p>
         </div>
 
@@ -381,6 +421,9 @@ function CourseContent() {
           const nextStop = course.stops[index + 1];
 
           const selected = selectedPlaceId === stop.placeId;
+
+          const isFirst = index === 0;
+          const isLast = index === course.stops.length - 1;
 
           return (
             <div
@@ -457,7 +500,29 @@ function CourseContent() {
                   <p className="mt-4 text-xs font-semibold">상세 보기 →</p>
                 </button>
 
-                <div className="border-t border-gray-100 px-5 py-3">
+                <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-5 py-3">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveCourseStop(stop.placeId, "UP")}
+                      disabled={isFirst}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:border-black disabled:cursor-not-allowed disabled:border-gray-100 disabled:text-gray-300"
+                      aria-label={`${stop.place.name}을 이전 순서로 이동`}
+                    >
+                      ↑ 위로
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => moveCourseStop(stop.placeId, "DOWN")}
+                      disabled={isLast}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold transition hover:border-black disabled:cursor-not-allowed disabled:border-gray-100 disabled:text-gray-300"
+                      aria-label={`${stop.place.name}을 다음 순서로 이동`}
+                    >
+                      ↓ 아래로
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => removeCourseStop(stop.placeId)}
@@ -479,8 +544,7 @@ function CourseContent() {
                     <p className="mt-1 text-sm font-medium">
                       예상 도보 {nextStop.walkingMinutesFromPrevious}분
                       <span className="mx-2 text-gray-300">·</span>
-                      {nextStop.distanceFromPreviousKm}
-                      km
+                      {nextStop.distanceFromPreviousKm}km
                     </p>
                   </div>
                 </div>
