@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
 type SearchMode = "CONTENT" | "ACTOR";
 
@@ -40,6 +41,7 @@ type PlaceRelation = {
 
 export default function ExplorePage() {
   const router = useRouter();
+  const [detailPlace, setDetailPlace] = useState<Place | null>(null);
 
   const [mode, setMode] = useState<SearchMode>("CONTENT");
 
@@ -755,9 +757,12 @@ export default function ExplorePage() {
           {!placesLoading && !placesError && places.length > 0 && (
             <div className="space-y-3">
               {places.map((relation) => (
-                <article
+                <button
+                  type="button"
                   key={relation.id}
-                  className="rounded-2xl border border-gray-200 p-4"
+                  onClick={() => setDetailPlace(relation.places)}
+                  aria-label={`${relation.places.name} 장소 설명 보기`}
+                  className="w-full rounded-2xl border border-gray-200 p-4 text-left transition hover:border-stone-500 focus-visible:outline-2 focus-visible:outline-offset-2"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-semibold">{relation.places.name}</p>
@@ -790,7 +795,10 @@ export default function ExplorePage() {
                       {relation.verified_fact}
                     </p>
                   )}
-                </article>
+                  <span className="mt-4 block text-xs font-semibold text-stone-600">
+                    장면·장소 이야기 보기 ↗
+                  </span>
+                </button>
               ))}
             </div>
           )}
@@ -805,6 +813,15 @@ export default function ExplorePage() {
             </button>
           )}
         </section>
+      )}
+      {detailPlace && selectedContent && (
+        <PlaceDetailDialog
+          key={`${selectedContent.id}/${detailPlace.id}`}
+          contentId={selectedContent.id}
+          placeId={detailPlace.id}
+          placeName={detailPlace.name}
+          onClose={() => setDetailPlace(null)}
+        />
       )}
     </main>
   );
