@@ -3,6 +3,8 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import BackButton from "@/components/common/BackButton";
+
 const durations = [
   {
     label: "3시간",
@@ -42,22 +44,22 @@ const walkingOptions = [
 ];
 
 type PlanningInput = {
-  contentId: number;
+  contentIds: number[];
   actorIds: number[];
   durationMinutes: number;
   maxWalkingMinutes: number | null;
 };
 
-function parseActorIds(actorIdsParam: string | null): number[] {
-  if (!actorIdsParam) {
+function parseIds(value: string | null): number[] {
+  if (!value) {
     return [];
   }
 
   return Array.from(
     new Set(
-      actorIdsParam
+      value
         .split(",")
-        .map((value) => Number(value.trim()))
+        .map((item) => Number(item.trim()))
         .filter((id) => Number.isInteger(id) && id > 0),
     ),
   );
@@ -65,25 +67,20 @@ function parseActorIds(actorIdsParam: string | null): number[] {
 
 function PlanningContent() {
   const router = useRouter();
-
   const searchParams = useSearchParams();
-
-  const contentId = searchParams.get("contentId");
 
   const contentTitle = searchParams.get("title");
 
-  const actorIdsParam = searchParams.get("actorIds");
+  const contentIds = parseIds(searchParams.get("contentIds"));
 
-  const actorNamesParam = searchParams.get("actorNames");
+  const actorIds = parseIds(searchParams.get("actorIds"));
 
-  const actorIds = parseActorIds(actorIdsParam);
-
-  const actorNames = actorNamesParam
-    ? actorNamesParam
-        .split(",")
-        .map((name) => name.trim())
-        .filter(Boolean)
-    : [];
+  const actorNames =
+    searchParams
+      .get("actorNames")
+      ?.split(",")
+      .map((name) => name.trim())
+      .filter(Boolean) ?? [];
 
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
@@ -92,7 +89,7 @@ function PlanningContent() {
    * = 아직 선택하지 않음
    *
    * null
-   * = 제한 없음 선택
+   * = "상관없음", 즉 도보 시간 제한 없음
    */
   const [maxWalkingMinutes, setMaxWalkingMinutes] = useState<
     number | null | undefined
@@ -103,30 +100,25 @@ function PlanningContent() {
   const [error, setError] = useState("");
 
   async function handleCreateCourse() {
-    if (!contentId || !durationMinutes || maxWalkingMinutes === undefined) {
-      return;
-    }
-
-    const parsedContentId = Number(contentId);
-
-    if (!Number.isInteger(parsedContentId) || parsedContentId <= 0) {
-      setError("잘못된 작품 정보입니다.");
-
+    /**
+     * contentIds가 하나 이상 있어야 함
+     * durationMinutes가 선택되어 있어야 함
+     * maxWalkingMinutes는
+     * - undefined: 미선택
+     * - null: 제한 없음
+     */
+    if (
+      contentIds.length === 0 ||
+      !durationMinutes ||
+      maxWalkingMinutes === undefined
+    ) {
       return;
     }
 
     const planningInput: PlanningInput = {
-      contentId: parsedContentId,
-
-      /**
-       * 중요:
-       * Explore에서 전달된 actorIds를
-       * 그대로 Trip API에 전달한다.
-       */
+      contentIds,
       actorIds,
-
       durationMinutes,
-
       maxWalkingMinutes,
     };
 
@@ -154,7 +146,7 @@ function PlanningContent() {
 
       const params = new URLSearchParams({
         data: courseData,
-        title: contentTitle ?? "",
+        title: contentTitle ?? "나의 여행 코스",
       });
 
       if (actorNames.length > 0) {
@@ -173,21 +165,46 @@ function PlanningContent() {
     }
   }
 
+  /**
+   * 작품 정보 자체가 없다면
+   * planning 페이지에 잘못 진입한 상태
+   */
+  if (contentIds.length === 0) {
+    return (
+      <main className="mx-auto min-h-screen max-w-md p-6">
+        <p className="text-sm text-red-600">선택된 작품 정보가 없습니다.</p>
+
+        <button
+          type="button"
+          onClick={() => router.push("/plan")}
+          className="mt-4 text-sm font-semibold"
+        >
+          ← 다시 선택하기
+        </button>
+      </main>
+    );
+  }
+
+  const canCreateCourse =
+    durationMinutes !== null &&
+    maxWalkingMinutes !== undefined &&
+    !isSubmitting;
+
   return (
     <main className="mx-auto min-h-screen max-w-md p-6">
       <header className="mb-10">
+        <BackButton className="mb-5" />
+
         <p className="text-sm font-medium text-gray-500">FAVEWAY</p>
 
         <h1 className="mt-2 text-2xl font-bold">여행 조건을 알려주세요</h1>
 
         {contentTitle && (
-          <p className="mt-3 text-sm text-gray-500">
-            선택한 작품: {contentTitle}
-          </p>
+          <p className="mt-3 text-sm text-gray-500">선택: {contentTitle}</p>
         )}
 
         {actorNames.length > 0 ? (
-          <div className="mt-2">
+          <div className="mt-3">
             <p className="text-sm text-gray-500">선택한 배우</p>
 
             <div className="mt-2 flex flex-wrap gap-2">
@@ -207,8 +224,14 @@ function PlanningContent() {
             </p>
           </div>
         ) : (
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             배우 선택 없음 · 작품 전체 촬영지를 기준으로 코스를 생성합니다.
+          </p>
+        )}
+
+        {contentIds.length > 1 && (
+          <p className="mt-2 text-xs text-gray-500">
+            {contentIds.length}개 작품의 촬영지를 함께 고려합니다.
           </p>
         )}
       </header>
@@ -289,12 +312,7 @@ function PlanningContent() {
 
       <button
         type="button"
-        disabled={
-          !contentId ||
-          !durationMinutes ||
-          maxWalkingMinutes === undefined ||
-          isSubmitting
-        }
+        disabled={!canCreateCourse}
         onClick={handleCreateCourse}
         className="mt-10 w-full rounded-2xl bg-black py-4 font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
       >

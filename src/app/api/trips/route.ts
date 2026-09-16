@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
 import {
   calculateDistanceKm,
   estimateWalkingMinutes,
 } from "@/lib/recommendation/distance";
 
 type TripRequest = {
-  contentId: number;
+  contentIds: number[];
   actorIds: number[];
   durationMinutes: number;
   maxWalkingMinutes: number | null;
@@ -24,6 +25,7 @@ type Place = {
 
 type PlaceRelation = {
   id: number;
+  content_id: number;
   relation_type: string;
   verification_status: string;
   verified_fact: string | null;
@@ -43,11 +45,17 @@ type SceneActor = {
 
 type Scene = {
   id: number;
+  content_id: number;
 };
 
 type ScenePlace = {
   scene_id: number;
   place_id: number;
+};
+
+type Content = {
+  id: number;
+  title: string;
 };
 
 type RouteSegment = {
@@ -58,9 +66,21 @@ type RouteSegment = {
 
 const MIN_STAY_MINUTES = 45;
 
-/**
- * 여행 가능 시간별 최대 장소 수
- */
+function normalizeIds(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value.filter(
+        (id): id is number =>
+          typeof id === "number" && Number.isInteger(id) && id > 0,
+      ),
+    ),
+  );
+}
+
 function getMaxStopsByDuration(durationMinutes: number): number {
   if (durationMinutes <= 180) {
     return 2;
@@ -73,9 +93,6 @@ function getMaxStopsByDuration(durationMinutes: number): number {
   return 4;
 }
 
-/**
- * 좌표 존재 여부 확인
- */
 function hasCoordinates(
   relation: PlaceRelation,
 ): relation is CoordinatePlaceRelation {
@@ -84,9 +101,6 @@ function hasCoordinates(
   );
 }
 
-/**
- * 가능한 장소 조합 + 방문 순서 생성
- */
 function createOrderedRoutes<T>(items: T[], count: number): T[][] {
   if (count === 0) {
     return [[]];
@@ -107,10 +121,6 @@ function createOrderedRoutes<T>(items: T[], count: number): T[][] {
   return routes;
 }
 
-/**
- * 하나의 Route에서
- * 장소 간 거리와 도보 시간 계산
- */
 function calculateRoute(relations: CoordinatePlaceRelation[]): RouteSegment[] {
   return relations.map((relation, index) => {
     if (index === 0) {
@@ -126,28 +136,25 @@ function calculateRoute(relations: CoordinatePlaceRelation[]): RouteSegment[] {
     const distanceKm = calculateDistanceKm(
       {
         latitude: previous.places.latitude,
-
         longitude: previous.places.longitude,
       },
       {
         latitude: relation.places.latitude,
-
         longitude: relation.places.longitude,
       },
     );
 
     return {
       relation,
-
       distanceFromPreviousKm: distanceKm,
-
       walkingMinutesFromPrevious: estimateWalkingMinutes(distanceKm),
     };
   });
 }
 
 /**
- * 동일 Place 중복 제거
+ * 같은 실제 장소가 여러 작품에 연결되어 있어도
+ * 한 코스 안에서는 한 번만 방문한다.
  */
 function deduplicatePlaces(relations: PlaceRelation[]): PlaceRelation[] {
   return Array.from(
@@ -158,39 +165,26 @@ function deduplicatePlaces(relations: PlaceRelation[]): PlaceRelation[] {
 }
 
 /**
- * 선택 배우 중 한 명 이상이 실제 등장한
- * Scene의 촬영지 ID를 반환한다.
- *
- * 여러 배우는 OR 조건이다.
- *
- * 육성재 + 이동욱:
- *
- * 육성재 Scene
- * UNION
- * 이동욱 Scene
- * ↓
- * Scene Place
+ * 선택 배우 중 한 명 이상이 등장한 장면의
+ * contentId + placeId 조합을 반환한다.
  */
-async function findActorScenePlaceIds(
+async function findActorScenePlaceKeys(
   actorIds: number[],
-  contentId: number,
-): Promise<Set<number>> {
+  contentIds: number[],
+): Promise<Set<string>> {
   if (actorIds.length === 0) {
-    return new Set<number>();
+    return new Set();
   }
 
   const supabase = createServerSupabaseClient();
 
-  /**
-   * 1. 선택 배우 중 한 명 이상이 등장한 Scene
-   */
   const { data: sceneActorData, error: sceneActorError } = await supabase
     .from("scene_actors")
     .select("scene_id")
     .in("actor_id", actorIds);
 
   if (sceneActorError) {
-    throw new Error(`Failed to fetch actor scenes: ${sceneActorError.message}`);
+    throw new Error(sceneActorError.message);
   }
 
   const actorSceneIds = Array.from(
@@ -200,55 +194,54 @@ async function findActorScenePlaceIds(
   );
 
   if (actorSceneIds.length === 0) {
-    return new Set<number>();
+    return new Set();
   }
 
-  /**
-   * 2. 위 Scene 중 현재 선택 작품에 속한 Scene만
-   */
   const { data: sceneData, error: sceneError } = await supabase
     .from("scenes")
-    .select("id")
-    .eq("content_id", contentId)
+    .select("id,content_id")
+    .in("content_id", contentIds)
     .in("id", actorSceneIds);
 
   if (sceneError) {
-    throw new Error(`Failed to fetch content scenes: ${sceneError.message}`);
+    throw new Error(sceneError.message);
   }
 
-  const validSceneIds = ((sceneData ?? []) as Scene[]).map((scene) => scene.id);
+  const scenes = (sceneData ?? []) as Scene[];
 
-  if (validSceneIds.length === 0) {
-    return new Set<number>();
+  if (scenes.length === 0) {
+    return new Set();
   }
 
-  /**
-   * 3. 해당 Scene과 연결된 촬영지 조회
-   */
+  const sceneContentMap = new Map(
+    scenes.map((scene) => [scene.id, scene.content_id]),
+  );
+
   const { data: scenePlaceData, error: scenePlaceError } = await supabase
     .from("scene_places")
-    .select(
-      `
-      scene_id,
-      place_id
-    `,
-    )
-    .in("scene_id", validSceneIds);
+    .select("scene_id,place_id")
+    .in(
+      "scene_id",
+      scenes.map((scene) => scene.id),
+    );
 
   if (scenePlaceError) {
-    throw new Error(`Failed to fetch scene places: ${scenePlaceError.message}`);
+    throw new Error(scenePlaceError.message);
   }
 
-  const scenePlaces = (scenePlaceData ?? []) as ScenePlace[];
+  const keys = new Set<string>();
 
-  return new Set(scenePlaces.map((row) => row.place_id));
+  ((scenePlaceData ?? []) as ScenePlace[]).forEach((row) => {
+    const contentId = sceneContentMap.get(row.scene_id);
+
+    if (contentId) {
+      keys.add(`${contentId}:${row.place_id}`);
+    }
+  });
+
+  return keys;
 }
 
-/**
- * 특정 장소 수에서
- * 여행 조건을 만족하는 Route 중
- * 이동거리가 가장 짧은 Route 선택
- */
 function findBestRouteForStopCount(
   candidates: CoordinatePlaceRelation[],
   stopCount: number,
@@ -258,15 +251,11 @@ function findBestRouteForStopCount(
   const orderedRoutes = createOrderedRoutes(candidates, stopCount);
 
   let bestRoute: RouteSegment[] | null = null;
-
   let shortestDistance = Number.POSITIVE_INFINITY;
 
   for (const orderedRoute of orderedRoutes) {
     const route = calculateRoute(orderedRoute);
 
-    /**
-     * 한 구간 최대 도보 시간 검증
-     */
     const exceedsWalkingLimit =
       maxWalkingMinutes !== null &&
       route.some((stop) => stop.walkingMinutesFromPrevious > maxWalkingMinutes);
@@ -280,9 +269,6 @@ function findBestRouteForStopCount(
       0,
     );
 
-    /**
-     * 각 장소 최소 45분 체류
-     */
     const minimumRequiredMinutes =
       totalWalkingMinutes + stopCount * MIN_STAY_MINUTES;
 
@@ -297,7 +283,6 @@ function findBestRouteForStopCount(
 
     if (totalDistance < shortestDistance) {
       shortestDistance = totalDistance;
-
       bestRoute = route;
     }
   }
@@ -305,10 +290,6 @@ function findBestRouteForStopCount(
   return bestRoute;
 }
 
-/**
- * 최대 방문 장소 수부터
- * 하나씩 줄이며 가능한 Route 탐색
- */
 function findAvailableRoute(
   candidates: CoordinatePlaceRelation[],
   durationMinutes: number,
@@ -339,27 +320,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as TripRequest;
 
-    const { contentId, actorIds, durationMinutes, maxWalkingMinutes } = body;
+    const contentIds = normalizeIds(body.contentIds);
+    const actorIds = normalizeIds(body.actorIds);
 
-    /**
-     * actorIds 정규화
-     */
-    const normalizedActorIds = Array.isArray(actorIds)
-      ? Array.from(new Set(actorIds))
-      : [];
-
-    const invalidActorIds = normalizedActorIds.some(
-      (actorId) => !Number.isInteger(actorId) || actorId <= 0,
-    );
+    const { durationMinutes, maxWalkingMinutes } = body;
 
     const invalidWalkingMinutes =
       maxWalkingMinutes !== null &&
       (!Number.isInteger(maxWalkingMinutes) || maxWalkingMinutes <= 0);
 
     if (
-      !Number.isInteger(contentId) ||
-      contentId <= 0 ||
-      invalidActorIds ||
+      contentIds.length === 0 ||
       !Number.isInteger(durationMinutes) ||
       durationMinutes <= 0 ||
       invalidWalkingMinutes
@@ -376,32 +347,40 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerSupabaseClient();
 
-    /**
-     * 작품 전체 촬영지 Candidate 조회
-     */
-    const { data, error } = await supabase
-      .from("place_relations")
-      .select(
-        `
-        id,
-        relation_type,
-        verification_status,
-        verified_fact,
-        places (
+    const [
+      { data: relationData, error: relationError },
+      { data: contentData, error: contentError },
+    ] = await Promise.all([
+      supabase
+        .from("place_relations")
+        .select(
+          `
           id,
-          name,
-          address,
-          latitude,
-          longitude,
-          place_type,
-          is_active
+          content_id,
+          relation_type,
+          verification_status,
+          verified_fact,
+          places (
+            id,
+            name,
+            address,
+            latitude,
+            longitude,
+            place_type,
+            is_active
+          )
+        `,
         )
-      `,
-      )
-      .eq("content_id", contentId);
+        .in("content_id", contentIds),
 
-    if (error) {
-      console.error("Failed to fetch trip candidates:", error);
+      supabase.from("contents").select("id,title").in("id", contentIds),
+    ]);
+
+    if (relationError || contentError) {
+      console.error(
+        "Failed to fetch trip candidates:",
+        relationError ?? contentError,
+      );
 
       return NextResponse.json(
         {
@@ -413,47 +392,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const relations = (data ?? []) as unknown as PlaceRelation[];
+    const contents = (contentData ?? []) as Content[];
 
-    /**
-     * 비활성 장소 제외
-     */
-    const activeRelations = relations.filter(
+    const titleMap = new Map(
+      contents.map((content) => [content.id, content.title]),
+    );
+
+    const relations = (relationData ?? []) as unknown as PlaceRelation[];
+
+    let candidateRelations = relations.filter(
       (relation) => relation.places.is_active !== false,
     );
 
-    /**
-     * 동일 장소 중복 제거
-     */
-    let candidateRelations = deduplicatePlaces(activeRelations);
-
-    /**
-     * 배우가 1명 이상 선택된 경우
-     * 반드시 Actor → Scene → Place 기준으로
-     * Candidate를 다시 제한한다.
-     */
-    if (normalizedActorIds.length > 0) {
-      const actorScenePlaceIds = await findActorScenePlaceIds(
-        normalizedActorIds,
-        contentId,
+    if (actorIds.length > 0) {
+      const actorScenePlaceKeys = await findActorScenePlaceKeys(
+        actorIds,
+        contentIds,
       );
 
       candidateRelations = candidateRelations.filter((relation) =>
-        actorScenePlaceIds.has(relation.places.id),
+        actorScenePlaceKeys.has(`${relation.content_id}:${relation.places.id}`),
       );
     }
 
-    /**
-     * 배우를 선택했는데
-     * Scene 기반 촬영지가 하나도 없는 경우
-     *
-     * 작품 전체 장소로 자동 확장하지 않는다.
-     */
+    candidateRelations = deduplicatePlaces(candidateRelations);
+
     if (candidateRelations.length === 0) {
       return NextResponse.json(
         {
           message:
-            normalizedActorIds.length > 0
+            actorIds.length > 0
               ? "선택한 배우가 등장한 장면과 연결된 촬영지가 없습니다."
               : "등록된 촬영지가 없습니다.",
         },
@@ -463,9 +431,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /**
-     * 좌표 존재 장소만 Route Candidate로 사용
-     */
     const coordinatePlaces = candidateRelations.filter(hasCoordinates);
 
     if (coordinatePlaces.length === 0) {
@@ -479,9 +444,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /**
-     * Route 생성
-     */
     const route = findAvailableRoute(
       coordinatePlaces,
       durationMinutes,
@@ -493,7 +455,7 @@ export async function POST(request: NextRequest) {
         {
           message:
             maxWalkingMinutes !== null
-              ? `한 번에 ${maxWalkingMinutes}분 이내로 이동할 수 있는 코스를 찾지 못했습니다. 도보 조건을 변경해 다시 시도해주세요.`
+              ? `한 번에 ${maxWalkingMinutes}분 이내로 이동할 수 있는 코스를 찾지 못했습니다.`
               : "선택한 시간 안에 방문 가능한 코스를 만들 수 없습니다.",
         },
         {
@@ -517,6 +479,11 @@ export async function POST(request: NextRequest) {
     const stayMinutes = Math.floor(availableStayMinutes / route.length);
 
     const stops = route.map((routeStop, index) => ({
+      contentId: routeStop.relation.content_id,
+
+      contentTitle:
+        titleMap.get(routeStop.relation.content_id) ?? "작품 정보 없음",
+
       placeId: routeStop.relation.places.id,
 
       order: index + 1,
@@ -529,11 +496,7 @@ export async function POST(request: NextRequest) {
 
       walkingMinutesFromPrevious: routeStop.walkingMinutesFromPrevious,
 
-      /**
-       * actorIds가 존재하면
-       * 이미 Actor Scene 기반으로 Filter된 장소
-       */
-      isActorScenePlace: normalizedActorIds.length > 0,
+      isActorScenePlace: actorIds.length > 0,
 
       relationType: routeStop.relation.relation_type,
 
@@ -546,16 +509,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       data: {
-        contentId,
-
-        actorIds: normalizedActorIds,
-
+        contentIds,
+        actorIds,
         durationMinutes,
-
         maxWalkingMinutes,
 
-        candidateSource:
-          normalizedActorIds.length > 0 ? "ACTOR_SCENE" : "CONTENT",
+        candidateSource: actorIds.length > 0 ? "ACTOR_SCENE" : "CONTENT",
 
         candidateCount: coordinatePlaces.length,
 
