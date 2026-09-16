@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 import BackButton from "@/components/common/BackButton";
+import CourseMap from "@/components/map/CourseMap";
+import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
 type Place = {
   id: number;
@@ -53,6 +54,45 @@ function CourseContent() {
   const rawData = searchParams.get("data");
   const title = searchParams.get("title");
 
+  let course: CourseData | null = null;
+
+  if (rawData) {
+    try {
+      course = JSON.parse(decodeURIComponent(rawData)) as CourseData;
+    } catch {
+      course = null;
+    }
+  }
+
+  const mapStops = useMemo(() => {
+    if (!course) {
+      return [];
+    }
+
+    return course.stops.flatMap((stop) => {
+      const { latitude, longitude } = stop.place;
+
+      if (
+        latitude == null ||
+        longitude == null ||
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          placeId: stop.placeId,
+          order: stop.order,
+          name: stop.place.name,
+          latitude,
+          longitude,
+        },
+      ];
+    });
+  }, [course]);
+
   if (!rawData) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
@@ -61,11 +101,7 @@ function CourseContent() {
     );
   }
 
-  let course: CourseData;
-
-  try {
-    course = JSON.parse(decodeURIComponent(rawData)) as CourseData;
-  } catch {
+  if (!course) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
         <p className="text-sm text-red-600">코스 정보를 불러오지 못했습니다.</p>
@@ -82,7 +118,7 @@ function CourseContent() {
 
         <h1 className="mt-2 text-2xl font-bold">{title || "나의 여행 코스"}</h1>
 
-        <p className="mt-2 text-sm text-gray-500">
+        <p className="mt-2 text-sm leading-6 text-gray-500">
           촬영지 {course.stops.length}곳으로 구성된 코스입니다.
         </p>
 
@@ -121,7 +157,61 @@ function CourseContent() {
         </div>
       </header>
 
+      <section className="mb-10">
+        <div className="mb-4">
+          <p className="text-xs font-semibold tracking-[0.16em] text-gray-400">
+            YOUR FAVEWAY ROUTE
+          </p>
+
+          <h2 className="mt-2 text-xl font-bold">지도에서 보는 나의 코스</h2>
+
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            숫자는 실제 방문 순서를 나타냅니다.
+          </p>
+        </div>
+
+        {mapStops.length > 0 ? (
+          <>
+            <CourseMap stops={mapStops} />
+
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {course.stops.map((stop) => (
+                <div
+                  key={`${stop.contentId}-${stop.placeId}`}
+                  className="flex shrink-0 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2"
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                    {stop.order}
+                  </span>
+
+                  <span className="max-w-40 truncate text-xs font-medium">
+                    {stop.place.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-gray-400">
+              지도 위 연결선은 현재 방문 순서를 보여주는 선이며 실제 도보 경로는
+              아닙니다.
+            </p>
+          </>
+        ) : (
+          <div className="rounded-2xl bg-gray-50 p-5 text-sm leading-6 text-gray-500">
+            지도에 표시할 촬영지 좌표가 없습니다.
+          </div>
+        )}
+      </section>
+
       <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold tracking-[0.16em] text-gray-400">
+            COURSE STOPS
+          </p>
+
+          <h2 className="mt-2 text-xl font-bold">이 순서로 만나보세요</h2>
+        </div>
+
         {course.stops.map((stop, index) => {
           const nextStop = course.stops[index + 1];
 
@@ -143,9 +233,9 @@ function CourseContent() {
                       {stop.order.toString().padStart(2, "0")}
                     </p>
 
-                    <h2 className="mt-1 text-lg font-bold">
+                    <h3 className="mt-1 text-lg font-bold">
                       {stop.place.name}
-                    </h2>
+                    </h3>
 
                     <p className="mt-1 text-xs text-gray-500">
                       {stop.contentTitle}
@@ -183,14 +273,18 @@ function CourseContent() {
               </button>
 
               {nextStop && (
-                <div className="px-5 py-4">
-                  <p className="text-xs text-gray-500">다음 장소까지</p>
+                <div className="px-5 py-5">
+                  <div className="border-l-2 border-dashed border-gray-200 pl-4">
+                    <p className="text-xs text-gray-500">
+                      {stop.order} → {nextStop.order} · 다음 장소까지
+                    </p>
 
-                  <p className="mt-1 text-sm font-medium">
-                    도보 약 {nextStop.walkingMinutesFromPrevious}분
-                    <span className="mx-2 text-gray-300">·</span>
-                    {nextStop.distanceFromPreviousKm}km
-                  </p>
+                    <p className="mt-1 text-sm font-medium">
+                      예상 도보 {nextStop.walkingMinutesFromPrevious}분
+                      <span className="mx-2 text-gray-300">·</span>
+                      {nextStop.distanceFromPreviousKm}km
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -200,7 +294,7 @@ function CourseContent() {
 
       <div className="mt-8 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-gray-500">
         체류 시간은 전체 여행 시간에서 예상 이동 시간을 제외한 뒤 각 장소에
-        분배한 값입니다.
+        분배한 값입니다. 현재 이동 거리와 도보 시간은 좌표 기반 추정값입니다.
       </div>
 
       {detailTarget && (
