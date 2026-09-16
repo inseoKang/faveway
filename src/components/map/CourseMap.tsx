@@ -13,6 +13,8 @@ export type CourseMapStop = {
 
 type CourseMapProps = {
   stops: CourseMapStop[];
+  selectedPlaceId?: number | null;
+  onSelectPlace?: (placeId: number) => void;
 };
 
 const SEOUL_CENTER = {
@@ -20,7 +22,11 @@ const SEOUL_CENTER = {
   longitude: 126.978,
 };
 
-export default function CourseMap({ stops }: CourseMapProps) {
+export default function CourseMap({
+  stops,
+  selectedPlaceId,
+  onSelectPlace,
+}: CourseMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [sdkReady, setSdkReady] = useState(false);
@@ -95,20 +101,33 @@ export default function CourseMap({ stops }: CourseMapProps) {
       marker.type = "button";
       marker.textContent = String(stop.order);
       marker.title = `${stop.order}. ${stop.name}`;
+      marker.setAttribute(
+        "aria-label",
+        `${stop.order}번째 방문 장소 ${stop.name}`,
+      );
 
-      marker.style.width = "38px";
-      marker.style.height = "38px";
+      const isSelected = selectedPlaceId === stop.placeId;
+
+      marker.style.width = isSelected ? "44px" : "38px";
+      marker.style.height = isSelected ? "44px" : "38px";
       marker.style.borderRadius = "9999px";
       marker.style.border = "3px solid white";
-      marker.style.background = "#4F46E5";
+      marker.style.background = isSelected ? "#312E81" : "#4F46E5";
       marker.style.color = "white";
       marker.style.fontSize = "14px";
       marker.style.fontWeight = "700";
-      marker.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.2)";
+      marker.style.boxShadow = isSelected
+        ? "0 6px 18px rgba(49, 46, 129, 0.35)"
+        : "0 4px 12px rgba(0, 0, 0, 0.2)";
       marker.style.display = "flex";
       marker.style.alignItems = "center";
       marker.style.justifyContent = "center";
-      marker.style.cursor = "default";
+      marker.style.cursor = "pointer";
+      marker.style.transition = "all 0.2s ease";
+
+      marker.addEventListener("click", () => {
+        onSelectPlace?.(stop.placeId);
+      });
 
       return new kakao.maps.CustomOverlay({
         map,
@@ -116,7 +135,7 @@ export default function CourseMap({ stops }: CourseMapProps) {
         content: marker,
         xAnchor: 0.5,
         yAnchor: 0.5,
-        zIndex: 3,
+        zIndex: isSelected ? 4 : 3,
       });
     });
 
@@ -145,7 +164,7 @@ export default function CourseMap({ stops }: CourseMapProps) {
 
       polyline?.setMap(null);
     };
-  }, [sdkReady, validStops]);
+  }, [sdkReady, validStops, selectedPlaceId, onSelectPlace]);
 
   if (!appKey) {
     return (
