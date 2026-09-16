@@ -51,6 +51,22 @@ type DetailTarget = {
   place: Place;
 };
 
+type WalkingViolation = {
+  fromOrder: number;
+  toOrder: number;
+  fromPlaceName: string;
+  toPlaceName: string;
+  walkingMinutes: number;
+  maxWalkingMinutes: number;
+};
+
+type CourseValidation = {
+  isValid: boolean;
+  walkingViolations: WalkingViolation[];
+  exceedsDuration: boolean;
+  durationOverMinutes: number;
+};
+
 function rebuildCourse(course: CourseData, stops: CourseStop[]): CourseData {
   const recalculatedStops = stops.map((stop, index) => {
     if (index === 0) {
@@ -134,6 +150,46 @@ function rebuildCourse(course: CourseData, stops: CourseStop[]): CourseData {
   };
 }
 
+function validateCourse(course: CourseData): CourseValidation {
+  const walkingViolations: WalkingViolation[] = [];
+
+  if (course.maxWalkingMinutes !== null) {
+    course.stops.forEach((stop, index) => {
+      if (index === 0) {
+        return;
+      }
+
+      if (stop.walkingMinutesFromPrevious <= course.maxWalkingMinutes!) {
+        return;
+      }
+
+      const previousStop = course.stops[index - 1];
+
+      walkingViolations.push({
+        fromOrder: previousStop.order,
+        toOrder: stop.order,
+        fromPlaceName: previousStop.place.name,
+        toPlaceName: stop.place.name,
+        walkingMinutes: stop.walkingMinutesFromPrevious,
+        maxWalkingMinutes: course.maxWalkingMinutes!,
+      });
+    });
+  }
+
+  const exceedsDuration = course.totalWalkingMinutes > course.durationMinutes;
+
+  const durationOverMinutes = exceedsDuration
+    ? course.totalWalkingMinutes - course.durationMinutes
+    : 0;
+
+  return {
+    isValid: walkingViolations.length === 0 && !exceedsDuration,
+    walkingViolations,
+    exceedsDuration,
+    durationOverMinutes,
+  };
+}
+
 function CourseContent() {
   const searchParams = useSearchParams();
 
@@ -187,6 +243,14 @@ function CourseContent() {
         },
       ];
     });
+  }, [course]);
+
+  const validation = useMemo(() => {
+    if (!course) {
+      return null;
+    }
+
+    return validateCourse(course);
   }, [course]);
 
   function selectCourseStop(placeId: number) {
@@ -288,7 +352,7 @@ function CourseContent() {
     );
   }
 
-  if (!course) {
+  if (!course || !validation) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
         <p className="text-sm text-red-600">코스 정보를 불러오지 못했습니다.</p>
@@ -343,6 +407,68 @@ function CourseContent() {
           </div>
         </div>
       </header>
+
+      {!validation.isValid && (
+        <section className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-700"
+            >
+              !
+            </span>
+
+            <div>
+              <h2 className="font-bold text-amber-900">
+                현재 코스가 선택한 여행 조건을 벗어났어요.
+              </h2>
+
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                방문 순서를 다시 조정하거나 장소를 삭제해 조건에 맞는 코스로
+                변경해 주세요.
+              </p>
+            </div>
+          </div>
+
+          {validation.walkingViolations.length > 0 && (
+            <div className="mt-5 space-y-3">
+              {validation.walkingViolations.map((violation) => (
+                <div
+                  key={`${violation.fromOrder}-${violation.toOrder}-${violation.toPlaceName}`}
+                  className="rounded-xl bg-white/70 p-4"
+                >
+                  <p className="text-xs font-semibold text-amber-700">
+                    {violation.fromOrder} → {violation.toOrder} 구간
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-gray-900">
+                    {violation.fromPlaceName} → {violation.toPlaceName}
+                  </p>
+
+                  <p className="mt-2 text-sm leading-6 text-gray-600">
+                    예상 도보 {violation.walkingMinutes}분 · 설정한 최대 도보{" "}
+                    {violation.maxWalkingMinutes}분
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {validation.exceedsDuration && (
+            <div className="mt-3 rounded-xl bg-white/70 p-4">
+              <p className="text-xs font-semibold text-amber-700">
+                여행 가능 시간 초과
+              </p>
+
+              <p className="mt-1 text-sm text-gray-700">
+                이동에만 약 {course.totalWalkingMinutes}분이 필요해 여행 가능
+                시간 {course.durationMinutes}분을{" "}
+                {validation.durationOverMinutes}분 초과합니다.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="mb-10">
         <div className="mb-4">
@@ -424,6 +550,11 @@ function CourseContent() {
 
           const isFirst = index === 0;
           const isLast = index === course.stops.length - 1;
+
+          const nextStopExceedsWalkingLimit =
+            nextStop != null &&
+            course.maxWalkingMinutes !== null &&
+            nextStop.walkingMinutesFromPrevious > course.maxWalkingMinutes;
 
           return (
             <div
@@ -536,8 +667,20 @@ function CourseContent() {
 
               {nextStop && (
                 <div className="px-5 py-5">
-                  <div className="border-l-2 border-dashed border-gray-200 pl-4">
-                    <p className="text-xs text-gray-500">
+                  <div
+                    className={`border-l-2 border-dashed pl-4 ${
+                      nextStopExceedsWalkingLimit
+                        ? "border-amber-400"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <p
+                      className={`text-xs ${
+                        nextStopExceedsWalkingLimit
+                          ? "font-semibold text-amber-700"
+                          : "text-gray-500"
+                      }`}
+                    >
                       {stop.order} → {nextStop.order} · 다음 장소까지
                     </p>
 
@@ -546,6 +689,13 @@ function CourseContent() {
                       <span className="mx-2 text-gray-300">·</span>
                       {nextStop.distanceFromPreviousKm}km
                     </p>
+
+                    {nextStopExceedsWalkingLimit && (
+                      <p className="mt-2 text-xs font-medium text-amber-700">
+                        설정한 최대 도보 {course.maxWalkingMinutes}분을 초과하는
+                        구간입니다.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
