@@ -17,7 +17,7 @@ export default function BackButton({
     <button
       type="button"
       onClick={() => router.back()}
-      className={`inline-flex items-center gap-1 text-sm text-gray-500 transition hover:text-black ${className}`}
+      className={`fw-back ${className}`}
     >
       <span aria-hidden="true">←</span>
       <span>{label}</span>

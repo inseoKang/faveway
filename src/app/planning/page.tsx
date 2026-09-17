@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import BackButton from "@/components/common/BackButton";
+import PageHeader from "@/components/common/PageHeader";
 
 const durations = [
   {
@@ -171,13 +171,13 @@ function PlanningContent() {
    */
   if (contentIds.length === 0) {
     return (
-      <main className="mx-auto min-h-screen max-w-md p-6">
-        <p className="text-sm text-red-600">선택된 작품 정보가 없습니다.</p>
+      <main className="fw-page">
+        <p className="fw-state fw-error">선택된 작품 정보가 없습니다.</p>
 
         <button
           type="button"
           onClick={() => router.push("/plan")}
-          className="mt-4 text-sm font-semibold"
+          className="fw-secondary-button mt-4"
         >
           ← 다시 선택하기
         </button>
@@ -191,56 +191,59 @@ function PlanningContent() {
     !isSubmitting;
 
   return (
-    <main className="mx-auto min-h-screen max-w-md p-6">
-      <header className="mb-10">
-        <BackButton className="mb-5" />
-
-        <p className="text-sm font-medium text-gray-500">FAVEWAY</p>
-
-        <h1 className="mt-2 text-2xl font-bold">여행 조건을 알려주세요</h1>
-
-        {contentTitle && (
-          <p className="mt-3 text-sm text-gray-500">선택: {contentTitle}</p>
-        )}
-
-        {actorNames.length > 0 ? (
-          <div className="mt-3">
-            <p className="text-sm text-gray-500">선택한 배우</p>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              {actorNames.map((actorName) => (
-                <span
-                  key={actorName}
-                  className="rounded-full bg-gray-100 px-3 py-1 text-sm"
-                >
-                  {actorName}
-                </span>
-              ))}
-            </div>
-
-            <p className="mt-2 text-xs leading-5 text-gray-500">
-              선택한 배우 중 한 명 이상이 등장한 장면의 촬영지를 기준으로 코스를
-              생성합니다.
+    <main className="fw-page">
+      <PageHeader
+        eyebrow="PLAN YOUR WALK"
+        title="나에게 맞는 여행의 속도"
+        description="머무는 시간과 걷는 시간을 정해볼까요?"
+        step={2}
+      >
+        <div className="fw-selection-summary">
+          {contentTitle && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              선택: {contentTitle}
             </p>
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-gray-500">
-            배우 선택 없음 · 작품 전체 촬영지를 기준으로 코스를 생성합니다.
-          </p>
-        )}
+          )}
 
-        {contentIds.length > 1 && (
-          <p className="mt-2 text-xs text-gray-500">
-            {contentIds.length}개 작품의 촬영지를 함께 고려합니다.
-          </p>
-        )}
-      </header>
+          {actorNames.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-sm text-muted-foreground">선택한 배우</p>
 
-      <section>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {actorNames.map((actorName) => (
+                  <span
+                    key={actorName}
+                    className="rounded-full bg-gray-100 px-3 py-1 text-sm"
+                  >
+                    {actorName}
+                  </span>
+                ))}
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                선택한 배우 중 한 명 이상이 등장한 장면의 촬영지를 기준으로
+                코스를 생성합니다.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              배우 선택 없음 · 작품 전체 촬영지를 기준으로 코스를 생성합니다.
+            </p>
+          )}
+
+          {contentIds.length > 1 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {contentIds.length}개 작품의 촬영지를 함께 고려합니다.
+            </p>
+          )}
+        </div>
+      </PageHeader>
+
+      <section className="fw-panel">
         <h2 className="mb-1 font-semibold">얼마나 여행할까요?</h2>
 
-        <p className="mb-4 text-sm text-gray-500">
-          전체 여행 가능 시간을 선택해주세요.
+        <p className="mb-4 text-sm text-muted-foreground">
+          이동과 장소 체류를 포함한 전체 시간이에요.
         </p>
 
         <div className="grid grid-cols-3 gap-3">
@@ -252,11 +255,12 @@ function PlanningContent() {
                 key={duration.value}
                 type="button"
                 onClick={() => setDurationMinutes(duration.value)}
+                aria-pressed={selected}
                 disabled={isSubmitting}
-                className={`rounded-2xl border px-4 py-4 text-sm font-medium transition ${
+                className={`fw-duration rounded-2xl border px-4 py-4 text-sm font-medium transition ${
                   selected
-                    ? "border-black bg-black text-white"
-                    : "border-gray-200 bg-white text-black"
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-white text-foreground"
                 }`}
               >
                 {duration.label}
@@ -266,10 +270,10 @@ function PlanningContent() {
         </div>
       </section>
 
-      <section className="mt-10">
+      <section className="fw-panel mt-6">
         <h2 className="mb-1 font-semibold">한 번에 얼마나 걸을 수 있나요?</h2>
 
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-muted-foreground">
           장소와 장소 사이의 최대 도보 시간을 선택해주세요.
         </p>
 
@@ -282,18 +286,19 @@ function PlanningContent() {
                 key={option.label}
                 type="button"
                 onClick={() => setMaxWalkingMinutes(option.value)}
+                aria-pressed={selected}
                 disabled={isSubmitting}
-                className={`w-full rounded-2xl border p-4 text-left transition ${
+                className={`fw-choice w-full rounded-2xl border p-4 text-left transition ${
                   selected
-                    ? "border-black bg-black text-white"
-                    : "border-gray-200 bg-white text-black"
+                    ? "border-primary bg-primary text-white"
+                    : "border-border bg-white text-foreground"
                 }`}
               >
                 <p className="font-semibold">{option.label}</p>
 
                 <p
                   className={`mt-1 text-sm ${
-                    selected ? "text-gray-300" : "text-gray-500"
+                    selected ? "text-blue-100" : "text-muted-foreground"
                   }`}
                 >
                   {option.description}
@@ -305,19 +310,32 @@ function PlanningContent() {
       </section>
 
       {error && (
-        <p className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+        <p className="fw-state fw-error mt-6" role="alert">
           {error}
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!canCreateCourse}
-        onClick={handleCreateCourse}
-        className="mt-10 w-full rounded-2xl bg-black py-4 font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300"
-      >
-        {isSubmitting ? "코스를 만드는 중..." : "코스 만들기"}
-      </button>
+      <div className="fw-action-bar">
+        <p className="fw-action-summary">
+          {durationMinutes === null
+            ? "여행 시간을 선택해 주세요"
+            : `${durationMinutes / 60}시간 여행`}
+          {maxWalkingMinutes === undefined
+            ? " · 도보 조건 미선택"
+            : maxWalkingMinutes === null
+              ? " · 도보 제한 없음"
+              : ` · 한 구간 ${maxWalkingMinutes}분 이내`}
+        </p>
+        <button
+          type="button"
+          disabled={!canCreateCourse}
+          onClick={handleCreateCourse}
+          className="fw-primary-button"
+          aria-busy={isSubmitting}
+        >
+          {isSubmitting ? "코스를 만드는 중…" : "나의 코스 만들기"}
+        </button>
+      </div>
     </main>
   );
 }
@@ -325,7 +343,13 @@ function PlanningContent() {
 export default function PlanningPage() {
   return (
     <Suspense
-      fallback={<main className="p-6">여행 정보를 불러오는 중...</main>}
+      fallback={
+        <main className="fw-page">
+          <p className="fw-state" role="status">
+            여행 정보를 불러오는 중...
+          </p>
+        </main>
+      }
     >
       <PlanningContent />
     </Suspense>

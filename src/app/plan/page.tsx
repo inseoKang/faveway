@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import BackButton from "@/components/common/BackButton";
+import PageHeader from "@/components/common/PageHeader";
 
 type SearchMode = "CONTENT" | "ACTOR";
 
@@ -403,27 +403,23 @@ export default function PlanPage() {
       : selectedActor !== null && contents.length > 0;
 
   return (
-    <main className="mx-auto min-h-screen max-w-md p-6">
-      <header className="mb-8">
-        <BackButton className="mb-5" />
+    <main className="fw-page">
+      <PageHeader
+        eyebrow="CHOOSE YOUR STORY"
+        title="어떤 장면을 만나볼까요?"
+        description="좋아하는 작품이나 배우에서 여행을 시작해요."
+        step={1}
+      />
 
-        <p className="text-sm font-medium text-gray-500">FAVEWAY</p>
-
-        <h1 className="mt-2 text-2xl font-bold">여행 코스를 만들어볼까요?</h1>
-
-        <p className="mt-2 text-sm leading-6 text-gray-500">
-          먼저 좋아하는 작품이나 배우를 선택해주세요.
-        </p>
-      </header>
-
-      <section className="mb-8 grid grid-cols-2 gap-3">
+      <section className="fw-tabs" aria-label="탐색 기준">
         <button
           type="button"
           onClick={() => void changeMode("CONTENT")}
-          className={`rounded-2xl border py-3 text-sm font-semibold ${
+          aria-pressed={mode === "CONTENT"}
+          className={`fw-tab rounded-2xl border py-3 text-sm font-semibold ${
             mode === "CONTENT"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white"
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-white"
           }`}
         >
           작품으로 찾기
@@ -432,10 +428,11 @@ export default function PlanPage() {
         <button
           type="button"
           onClick={() => void changeMode("ACTOR")}
-          className={`rounded-2xl border py-3 text-sm font-semibold ${
+          aria-pressed={mode === "ACTOR"}
+          className={`fw-tab rounded-2xl border py-3 text-sm font-semibold ${
             mode === "ACTOR"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white"
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-white"
           }`}
         >
           배우로 찾기
@@ -443,7 +440,9 @@ export default function PlanPage() {
       </section>
 
       {loading && (
-        <p className="mb-5 text-sm text-gray-500">정보를 불러오는 중...</p>
+        <p className="fw-state mb-5" role="status">
+          정보를 불러오는 중...
+        </p>
       )}
 
       {mode === "CONTENT" && (
@@ -462,9 +461,17 @@ export default function PlanPage() {
               value={contentQuery}
               onChange={(event) => setContentQuery(event.target.value)}
               placeholder="예: 도깨비"
-              className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none focus:border-black"
+              className="fw-search"
             />
           </section>
+
+          {!loading && !error && filteredContents.length === 0 && (
+            <p className="fw-state">
+              {contentQuery.trim()
+                ? "일치하는 작품이 없어요. 다른 제목으로 검색해 보세요."
+                : "등록된 작품이 아직 없어요."}
+            </p>
+          )}
 
           {!loading && (
             <section className="space-y-3">
@@ -476,15 +483,16 @@ export default function PlanPage() {
                     key={content.id}
                     type="button"
                     onClick={() => void selectContent(content)}
-                    className={`w-full rounded-2xl border p-4 text-left ${
+                    aria-pressed={selectedContent?.id === content.id}
+                    className={`fw-choice w-full rounded-2xl border p-4 text-left ${
                       selected
-                        ? "border-black bg-gray-50"
-                        : "border-gray-200 bg-white"
+                        ? "border-primary bg-blue-50"
+                        : "border-border bg-white"
                     }`}
                   >
                     <p className="font-semibold">{content.title}</p>
 
-                    <p className="mt-1 text-sm text-gray-500">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {content.media_type}
 
                       {content.release_year ? ` · ${content.release_year}` : ""}
@@ -499,7 +507,7 @@ export default function PlanPage() {
             <section className="mt-8">
               <h2 className="font-semibold">원하는 배우 선택</h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 선택하지 않으면 작품 전체 촬영지를 기준으로 코스를 만듭니다.
               </p>
 
@@ -514,10 +522,11 @@ export default function PlanPage() {
                       key={actor.id}
                       type="button"
                       onClick={() => toggleContentActor(actor)}
-                      className={`rounded-full border px-4 py-2 text-sm ${
+                      aria-pressed={selected}
+                      className={`fw-chip rounded-full border px-4 py-2 text-sm ${
                         selected
-                          ? "border-black bg-black text-white"
-                          : "border-gray-200 bg-white"
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-white"
                       }`}
                     >
                       {actor.name}
@@ -551,11 +560,11 @@ export default function PlanPage() {
                 }
               }}
               placeholder="예: 공유"
-              className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none focus:border-black"
+              className="fw-search"
             />
 
             {actorLoading && (
-              <p className="mt-3 text-sm text-gray-500">
+              <p className="mt-3 text-sm text-muted-foreground">
                 배우를 검색하는 중...
               </p>
             )}
@@ -567,7 +576,8 @@ export default function PlanPage() {
                     key={actor.id}
                     type="button"
                     onClick={() => void selectActor(actor)}
-                    className="w-full rounded-2xl border border-gray-200 p-4 text-left"
+                    aria-pressed={selectedActor?.id === actor.id}
+                    className="fw-choice w-full rounded-2xl border border-border p-4 text-left"
                   >
                     <p className="font-semibold">{actor.name}</p>
                   </button>
@@ -580,7 +590,7 @@ export default function PlanPage() {
             <section className="mt-8">
               <h2 className="font-semibold">이 배우는 어때요?</h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 등록된 배우 중 무작위로 추천해드려요.
               </p>
 
@@ -590,7 +600,8 @@ export default function PlanPage() {
                     key={actor.id}
                     type="button"
                     onClick={() => void selectActor(actor)}
-                    className="rounded-2xl border border-gray-200 px-3 py-4 text-sm font-semibold"
+                    aria-pressed={selectedActor?.id === actor.id}
+                    className="fw-choice rounded-2xl border border-border px-3 py-4 text-sm font-semibold"
                   >
                     {actor.name}
                   </button>
@@ -602,14 +613,14 @@ export default function PlanPage() {
           {selectedActor && (
             <section className="mt-8">
               <div className="rounded-2xl bg-gray-50 p-4">
-                <p className="text-xs text-gray-500">선택한 배우</p>
+                <p className="text-xs text-muted-foreground">선택한 배우</p>
 
                 <p className="mt-1 font-semibold">{selectedActor.name}</p>
               </div>
 
               <h2 className="mt-8 font-semibold">작품 선택</h2>
 
-              <p className="mt-1 text-sm leading-6 text-gray-500">
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 원하는 작품만 선택할 수 있어요. 아무것도 선택하지 않으면 아래
                 작품 전체가 자동으로 선택됩니다.
               </p>
@@ -623,16 +634,17 @@ export default function PlanPage() {
                       key={content.id}
                       type="button"
                       onClick={() => toggleActorContent(content.id)}
-                      className={`w-full rounded-2xl border p-4 text-left ${
+                      aria-pressed={selected}
+                      className={`fw-choice w-full rounded-2xl border p-4 text-left ${
                         selected
-                          ? "border-black bg-gray-50"
-                          : "border-gray-200 bg-white"
+                          ? "border-primary bg-blue-50"
+                          : "border-border bg-white"
                       }`}
                     >
                       <p className="font-semibold">{content.title}</p>
 
                       {content.character_name && (
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-muted-foreground">
                           배역: {content.character_name}
                         </p>
                       )}
@@ -642,7 +654,7 @@ export default function PlanPage() {
               </div>
 
               {selectedActorContentIds.length === 0 && contents.length > 0 && (
-                <p className="mt-3 text-xs text-gray-500">
+                <p className="mt-3 text-xs text-muted-foreground">
                   현재 전체 {contents.length}개 작품을 대상으로 합니다.
                 </p>
               )}
@@ -652,19 +664,30 @@ export default function PlanPage() {
       )}
 
       {error && (
-        <p className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+        <p className="fw-state fw-error mt-6" role="alert">
           {error}
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!canContinue || loading}
-        onClick={goToPlanning}
-        className="mt-10 w-full rounded-2xl bg-black py-4 font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-      >
-        여행 조건 선택하기
-      </button>
+      <div className="fw-action-bar">
+        <p className="fw-action-summary">
+          {mode === "CONTENT"
+            ? selectedContent
+              ? `${selectedContent.title}${selectedActors.length ? ` · 배우 ${selectedActors.length}명` : " · 작품 전체 촬영지"}`
+              : "작품을 선택해 주세요"
+            : selectedActor
+              ? `${selectedActor.name} · ${selectedActorContentIds.length || contents.length}개 작품`
+              : "배우를 선택해 주세요"}
+        </p>
+        <button
+          type="button"
+          disabled={!canContinue || loading}
+          onClick={goToPlanning}
+          className="fw-primary-button"
+        >
+          여행 조건 선택하기 <span aria-hidden="true">→</span>
+        </button>
+      </div>
     </main>
   );
 }

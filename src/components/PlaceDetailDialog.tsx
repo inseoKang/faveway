@@ -153,11 +153,11 @@ export default function PlaceDetailDialog({
           onClose();
         }
       }}
-      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-3xl bg-white p-0 text-gray-900 shadow-2xl backdrop:bg-black/50"
+      className="fw-dialog"
     >
       <div className="min-h-60" onClick={(event) => event.stopPropagation()}>
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-          <p className="text-xs font-semibold tracking-[0.18em] text-gray-500">
+        <header className="fw-dialog-header">
+          <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground">
             FAVEWAY · PLACE
           </p>
 
@@ -166,29 +166,34 @@ export default function PlaceDetailDialog({
             autoFocus
             onClick={onClose}
             aria-label="닫기"
-            className="rounded-full border border-gray-200 px-4 py-2 text-sm"
+            className="fw-dialog-close"
           >
             닫기 ×
           </button>
         </header>
 
-        <div className="space-y-9 p-6">
+        <div className="fw-dialog-body">
           <section>
-            <p className="text-xs font-semibold text-gray-400">LOCATION</p>
+            <p className="text-xs font-semibold text-muted-foreground">
+              LOCATION
+            </p>
 
-            <h2 id="place-detail-title" className="mt-2 text-3xl font-bold">
+            <h2
+              id="place-detail-title"
+              className="mt-2 text-2xl font-bold leading-snug"
+            >
               {data?.place.name || placeName}
             </h2>
 
             {data && (
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-muted-foreground">
                 {data.content.title} 촬영지
               </p>
             )}
           </section>
 
           {!data && !error && (
-            <p className="py-8 text-sm text-gray-500">
+            <p className="py-8 text-sm text-muted-foreground">
               장소 정보를 불러오는 중...
             </p>
           )}
@@ -214,7 +219,7 @@ export default function PlaceDetailDialog({
           {data && (
             <>
               <section>
-                <p className="text-xs font-semibold text-gray-400">
+                <p className="text-xs font-semibold text-muted-foreground">
                   01 · 작품과 배우
                 </p>
 
@@ -223,34 +228,28 @@ export default function PlaceDetailDialog({
                 {data.actors.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {data.actors.map((actor) => (
-                      <span
-                        key={actor.id}
-                        className="rounded-full bg-gray-100 px-3 py-1 text-sm"
-                      >
+                      <span key={actor.id} className="fw-badge">
                         {actor.name}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-sm text-muted-foreground">
                     등록된 등장 배우 정보가 없습니다.
                   </p>
                 )}
               </section>
 
               <section>
-                <p className="text-xs font-semibold text-gray-400">
+                <p className="text-xs font-semibold text-muted-foreground">
                   02 · 장면 설명
                 </p>
 
                 <div className="mt-4 space-y-3">
                   {data.scenes.length > 0 ? (
                     data.scenes.map((scene) => (
-                      <article
-                        key={scene.id}
-                        className="rounded-2xl border border-gray-200 p-5"
-                      >
-                        <p className="text-xs font-semibold text-gray-400">
+                      <article key={scene.id} className="fw-scene-card">
+                        <p className="text-xs font-semibold text-muted-foreground">
                           {scene.episode?.trim()
                             ? `${scene.episode}회`
                             : "회차 정보 없음"}
@@ -262,7 +261,7 @@ export default function PlaceDetailDialog({
                         </p>
 
                         {scene.actors.length > 0 && (
-                          <p className="mt-3 text-xs text-gray-500">
+                          <p className="mt-3 text-xs text-muted-foreground">
                             등장 배우:{" "}
                             {scene.actors.map((actor) => actor.name).join(", ")}
                           </p>
@@ -270,7 +269,7 @@ export default function PlaceDetailDialog({
                       </article>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                       등록된 장면 정보가 없습니다.
                     </p>
                   )}
@@ -278,7 +277,7 @@ export default function PlaceDetailDialog({
               </section>
 
               <section>
-                <p className="text-xs font-semibold text-gray-400">
+                <p className="text-xs font-semibold text-muted-foreground">
                   03 · 장소 정보
                 </p>
 
@@ -294,14 +293,14 @@ export default function PlaceDetailDialog({
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-sm text-muted-foreground">
                     등록된 장소 설명이 아직 없습니다.
                   </p>
                 )}
               </section>
 
               <section>
-                <p className="text-xs font-semibold text-gray-400">
+                <p className="text-xs font-semibold text-muted-foreground">
                   04 · 실제 위치
                 </p>
 
@@ -316,7 +315,7 @@ export default function PlaceDetailDialog({
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-4 inline-flex rounded-full bg-black px-5 py-3 text-sm font-semibold text-white"
+                    className="fw-primary-button mt-4 inline-flex"
                   >
                     지도에서 위치 보기 ↗
                   </a>
@@ -336,7 +335,7 @@ export default function PlaceDetailDialog({
                       return (
                         <div
                           key={index}
-                          className="rounded-xl bg-gray-50 p-4 text-xs leading-6 text-gray-600"
+                          className="rounded-xl bg-gray-50 p-4 text-xs leading-6 text-muted-foreground"
                         >
                           <p>상태: {source.verification_status}</p>
 
@@ -354,7 +353,7 @@ export default function PlaceDetailDialog({
                       );
                     })
                   ) : (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-muted-foreground">
                       연결된 출처 정보가 없습니다.
                     </p>
                   )}
