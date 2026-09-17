@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import BackButton from "@/components/common/BackButton";
+import ExploreMap, { type ExploreMapPlace } from "@/components/map/ExploreMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
 type SearchMode = "CONTENT" | "ACTOR";
@@ -76,6 +77,8 @@ export default function ExplorePage() {
   const [places, setPlaces] = useState<PlaceRelation[]>([]);
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
+
+  const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(true);
 
@@ -265,8 +268,10 @@ export default function ExplorePage() {
       }
 
       setPlaces(result.data ?? []);
+      setSelectedPlaceId(null);
     } catch (reason) {
       setPlaces([]);
+      setSelectedPlaceId(null);
 
       setError(
         reason instanceof Error
@@ -304,8 +309,10 @@ export default function ExplorePage() {
       }
 
       setPlaces(result.data ?? []);
+      setSelectedPlaceId(null);
     } catch (reason) {
       setPlaces([]);
+      setSelectedPlaceId(null);
 
       setError(
         reason instanceof Error
@@ -322,6 +329,7 @@ export default function ExplorePage() {
       setSelectedContent(content);
       setSelectedActors([]);
       setPlaces([]);
+      setSelectedPlaceId(null);
 
       await Promise.all([
         fetchContentActors(content.id),
@@ -363,6 +371,7 @@ export default function ExplorePage() {
 
       setContents([]);
       setPlaces([]);
+      setSelectedPlaceId(null);
 
       setLoading(true);
       setError("");
@@ -416,6 +425,7 @@ export default function ExplorePage() {
 
     setContentActors([]);
     setPlaces([]);
+    setSelectedPlaceId(null);
 
     setActorQuery("");
     setActors([]);
@@ -457,6 +467,47 @@ export default function ExplorePage() {
 
     return null;
   }
+
+  const mapPlaces = useMemo<ExploreMapPlace[]>(() => {
+    const uniquePlaces = new Map<number, ExploreMapPlace>();
+
+    places.forEach((relation) => {
+      const place = relation.places;
+
+      if (
+        place.latitude == null ||
+        place.longitude == null ||
+        !Number.isFinite(place.latitude) ||
+        !Number.isFinite(place.longitude)
+      ) {
+        return;
+      }
+
+      if (!uniquePlaces.has(place.id)) {
+        uniquePlaces.set(place.id, {
+          placeId: place.id,
+          name: place.name,
+          latitude: place.latitude,
+          longitude: place.longitude,
+        });
+      }
+    });
+
+    return Array.from(uniquePlaces.values());
+  }, [places]);
+
+  const selectPlaceFromMap = useCallback((placeId: number) => {
+    setSelectedPlaceId(placeId);
+
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-explore-place-id="${placeId}"]`)
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+    });
+  }, []);
 
   return (
     <main className="mx-auto min-h-screen max-w-md p-6">
@@ -661,13 +712,28 @@ export default function ExplorePage() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          <ExploreMap
+            places={mapPlaces}
+            selectedPlaceId={selectedPlaceId}
+            onSelectPlace={selectPlaceFromMap}
+          />
+
+          {mapPlaces.length === 0 && (
+            <p className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-gray-500">
+              현재 촬영지에는 지도에 표시할 수 있는 좌표 정보가 없습니다.
+              목록에서는 계속 확인할 수 있어요.
+            </p>
+          )}
+
+          <div className="mt-5 space-y-3">
             {places.map((relation) => {
               const contentId = placeContentId(relation);
+              const selected = selectedPlaceId === relation.places.id;
 
               return (
                 <button
                   key={`${contentId}-${relation.id}`}
+                  data-explore-place-id={relation.places.id}
                   type="button"
                   disabled={!contentId}
                   onClick={() => {
@@ -675,12 +741,18 @@ export default function ExplorePage() {
                       return;
                     }
 
+                    setSelectedPlaceId(relation.places.id);
+
                     setDetailTarget({
                       contentId,
                       place: relation.places,
                     });
                   }}
-                  className="w-full rounded-2xl border border-gray-200 p-5 text-left transition hover:border-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`w-full rounded-2xl border p-5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    selected
+                      ? "border-black bg-gray-50 ring-1 ring-black"
+                      : "border-gray-200 hover:border-black"
+                  }`}
                 >
                   {relation.content && (
                     <p className="mb-2 text-xs font-semibold text-gray-400">
