@@ -96,11 +96,13 @@ export default function ExploreMap({
       marker.title = place.name;
       marker.setAttribute("aria-label", `${place.name} 촬영지 선택`);
 
-      marker.style.width = isSelected ? "44px" : "38px";
-      marker.style.height = isSelected ? "44px" : "38px";
+      marker.setAttribute("aria-pressed", String(isSelected));
+
+      marker.style.width = isSelected ? "48px" : "44px";
+      marker.style.height = isSelected ? "48px" : "44px";
       marker.style.borderRadius = "9999px";
       marker.style.border = "3px solid white";
-      marker.style.background = isSelected ? "#111827" : "#4F46E5";
+      marker.style.background = isSelected ? "#10243A" : "#1769E0";
       marker.style.color = "white";
       marker.style.fontSize = isSelected ? "13px" : "12px";
       marker.style.fontWeight = "800";
@@ -143,15 +145,12 @@ export default function ExploreMap({
 
   if (!appKey) {
     return (
-      <div className="flex h-72 items-center justify-center rounded-3xl border border-red-200 bg-red-50 p-6 text-center">
+      <div className="flex h-60 sm:h-72 items-center justify-center rounded-[20px] border border-red-200 bg-red-50 p-6 text-center">
         <div>
-          <p className="font-semibold text-red-700">
-            Kakao Map API Key가 설정되지 않았습니다.
-          </p>
+          <p className="font-semibold text-red-700">지도를 표시할 수 없어요.</p>
 
           <p className="mt-2 text-sm leading-6 text-red-600">
-            `.env.local`의 `NEXT_PUBLIC_KAKAO_MAP_JAVASCRIPT_KEY`를 확인해
-            주세요.
+            아래 목록에서 촬영지 정보를 확인해 주세요.
           </p>
         </div>
       </div>
@@ -160,7 +159,7 @@ export default function ExploreMap({
 
   if (validPlaces.length === 0) {
     return (
-      <div className="flex h-72 items-center justify-center rounded-3xl border border-gray-200 bg-gray-50 p-6 text-center">
+      <div className="flex h-60 sm:h-72 items-center justify-center rounded-[20px] border border-gray-200 bg-gray-50 p-6 text-center">
         <p className="text-sm leading-6 text-gray-500">
           지도에 표시할 수 있는 좌표가 없습니다.
         </p>
@@ -179,24 +178,24 @@ export default function ExploreMap({
         onError={() => setSdkError(true)}
       />
 
-      <div className="overflow-hidden rounded-3xl border border-gray-200 bg-gray-100">
+      <div className="overflow-hidden rounded-[20px] border border-gray-200 bg-gray-100">
         {!sdkReady && !sdkError && (
-          <div className="flex h-80 items-center justify-center text-sm text-gray-500">
+          <div className="flex h-60 sm:h-72 items-center justify-center text-sm text-gray-500">
             촬영지 지도를 불러오는 중...
           </div>
         )}
 
         {sdkError && (
-          <div className="flex h-80 items-center justify-center p-6 text-center text-sm leading-6 text-red-600">
+          <div className="flex h-60 sm:h-72 items-center justify-center p-6 text-center text-sm leading-6 text-red-600">
             지도를 불러오지 못했습니다.
             <br />
-            Kakao JavaScript Key와 등록 도메인을 확인해 주세요.
+            잠시 후 다시 접속해 주세요. 촬영지 목록은 계속 이용할 수 있어요.
           </div>
         )}
 
         <div
           ref={containerRef}
-          className={sdkReady && !sdkError ? "h-80 w-full" : "hidden"}
+          className={sdkReady && !sdkError ? "h-60 sm:h-72 w-full" : "hidden"}
           aria-label="촬영지 탐색 지도"
         />
       </div>
