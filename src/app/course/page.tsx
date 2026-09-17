@@ -67,6 +67,27 @@ type CourseValidation = {
   durationOverMinutes: number;
 };
 
+type ContentSummary = {
+  id: number;
+  title: string;
+};
+
+type CandidateRelation = {
+  relation_type: string;
+  verification_status: string;
+  verified_fact: string | null;
+  places: Place;
+};
+
+type AddPlaceCandidate = {
+  contentId: number;
+  contentTitle: string;
+  relationType: string;
+  verificationStatus: string;
+  verifiedFact: string | null;
+  place: Place;
+};
+
 function rebuildCourse(course: CourseData, stops: CourseStop[]): CourseData {
   const recalculatedStops = stops.map((stop, index) => {
     if (index === 0) {
@@ -196,6 +217,13 @@ function CourseContent() {
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
+
+  const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
+  const [addPlaceCandidates, setAddPlaceCandidates] = useState<
+    AddPlaceCandidate[] | null
+  >(null);
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
 
   const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
@@ -338,6 +366,149 @@ function CourseContent() {
 
     window.setTimeout(() => {
       stopRefs.current[placeId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  }
+
+  async function loadAddPlaceCandidates() {
+    if (!course) {
+      return;
+    }
+
+    setIsAddPlaceOpen(true);
+
+    if (addPlaceCandidates !== null || isLoadingCandidates) {
+      return;
+    }
+
+    setIsLoadingCandidates(true);
+    setCandidateError(null);
+
+    try {
+      const contentsResponse = await fetch("/api/contents");
+
+      if (!contentsResponse.ok) {
+        throw new Error("작품 정보를 불러오지 못했습니다.");
+      }
+
+      const contentsBody = (await contentsResponse.json()) as {
+        data?: ContentSummary[];
+        message?: string;
+      };
+
+      const titleMap = new Map(
+        (contentsBody.data ?? []).map((content) => [content.id, content.title]),
+      );
+
+      const actorQuery =
+        course.actorIds.length > 0
+          ? `?actorIds=${course.actorIds.join(",")}`
+          : "";
+
+      const responses = await Promise.all(
+        course.contentIds.map(async (contentId) => {
+          const response = await fetch(
+            `/api/contents/${contentId}/places${actorQuery}`,
+          );
+
+          const body = (await response.json()) as {
+            data?: CandidateRelation[];
+            message?: string;
+          };
+
+          if (!response.ok) {
+            throw new Error(
+              body.message ?? "추가 가능한 촬영지를 불러오지 못했습니다.",
+            );
+          }
+
+          return (body.data ?? []).map(
+            (relation): AddPlaceCandidate => ({
+              contentId,
+              contentTitle: titleMap.get(contentId) ?? "작품 정보 없음",
+              relationType: relation.relation_type,
+              verificationStatus: relation.verification_status,
+              verifiedFact: relation.verified_fact,
+              place: relation.places,
+            }),
+          );
+        }),
+      );
+
+      const currentPlaceIds = new Set(course.stops.map((stop) => stop.placeId));
+      const uniqueCandidates = new Map<number, AddPlaceCandidate>();
+
+      responses.flat().forEach((candidate) => {
+        const { latitude, longitude } = candidate.place;
+
+        if (
+          currentPlaceIds.has(candidate.place.id) ||
+          candidate.place.is_active === false ||
+          latitude == null ||
+          longitude == null ||
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          uniqueCandidates.has(candidate.place.id)
+        ) {
+          return;
+        }
+
+        uniqueCandidates.set(candidate.place.id, candidate);
+      });
+
+      setAddPlaceCandidates(
+        Array.from(uniqueCandidates.values()).sort((a, b) =>
+          a.place.name.localeCompare(b.place.name, "ko"),
+        ),
+      );
+    } catch (error) {
+      setCandidateError(
+        error instanceof Error
+          ? error.message
+          : "추가 가능한 촬영지를 불러오지 못했습니다.",
+      );
+    } finally {
+      setIsLoadingCandidates(false);
+    }
+  }
+
+  function addCourseStop(candidate: AddPlaceCandidate) {
+    if (!course) {
+      return;
+    }
+
+    if (course.stops.some((stop) => stop.placeId === candidate.place.id)) {
+      window.alert("이미 코스에 포함된 장소입니다.");
+      return;
+    }
+
+    const newStop: CourseStop = {
+      contentId: candidate.contentId,
+      contentTitle: candidate.contentTitle,
+      placeId: candidate.place.id,
+      order: course.stops.length + 1,
+      stayMinutes: 0,
+      distanceFromPreviousKm: 0,
+      walkingMinutesFromPrevious: 0,
+      relationType: candidate.relationType,
+      verificationStatus: candidate.verificationStatus,
+      verifiedFact: candidate.verifiedFact,
+      place: candidate.place,
+    };
+
+    const nextCourse = rebuildCourse(course, [...course.stops, newStop]);
+
+    setCourse(nextCourse);
+    setSelectedPlaceId(candidate.place.id);
+    setAddPlaceCandidates(
+      (current) =>
+        current?.filter((item) => item.place.id !== candidate.place.id) ?? null,
+    );
+
+    window.setTimeout(() => {
+      stopRefs.current[candidate.place.id]?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
@@ -526,6 +697,111 @@ function CourseContent() {
         ) : (
           <div className="rounded-2xl bg-gray-50 p-5 text-sm leading-6 text-gray-500">
             지도에 표시할 촬영지 좌표가 없습니다.
+          </div>
+        )}
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.16em] text-gray-400">
+              ADD PLACE
+            </p>
+
+            <h2 className="mt-2 text-xl font-bold">촬영지 추가하기</h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              선택했던 작품과 배우 조건에 맞는 촬영지를 코스 마지막에 추가할 수
+              있어요.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isAddPlaceOpen) {
+                setIsAddPlaceOpen(false);
+                return;
+              }
+
+              void loadAddPlaceCandidates();
+            }}
+            className="shrink-0 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+          >
+            {isAddPlaceOpen ? "닫기" : "+ 장소 추가"}
+          </button>
+        </div>
+
+        {isAddPlaceOpen && (
+          <div className="mt-5 border-t border-gray-100 pt-5">
+            {isLoadingCandidates && (
+              <p className="text-sm text-gray-500">
+                추가 가능한 촬영지를 불러오는 중...
+              </p>
+            )}
+
+            {candidateError && (
+              <div className="rounded-xl bg-red-50 p-4">
+                <p className="text-sm text-red-600">{candidateError}</p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddPlaceCandidates(null);
+                    void loadAddPlaceCandidates();
+                  }}
+                  className="mt-3 text-xs font-semibold text-red-700 underline"
+                >
+                  다시 시도
+                </button>
+              </div>
+            )}
+
+            {!isLoadingCandidates &&
+              !candidateError &&
+              addPlaceCandidates?.length === 0 && (
+                <p className="rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500">
+                  현재 조건에서 더 추가할 수 있는 촬영지가 없습니다.
+                </p>
+              )}
+
+            {!isLoadingCandidates &&
+              !candidateError &&
+              addPlaceCandidates &&
+              addPlaceCandidates.length > 0 && (
+                <div className="space-y-3">
+                  {addPlaceCandidates.map((candidate) => (
+                    <div
+                      key={candidate.place.id}
+                      className="rounded-xl border border-gray-200 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="font-bold">{candidate.place.name}</h3>
+
+                          <p className="mt-1 text-xs text-gray-500">
+                            {candidate.contentTitle}
+                          </p>
+
+                          {candidate.place.address && (
+                            <p className="mt-2 text-sm leading-6 text-gray-500">
+                              {candidate.place.address}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addCourseStop(candidate)}
+                          className="shrink-0 rounded-lg border border-indigo-600 px-3 py-2 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                        >
+                          코스에 추가
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
           </div>
         )}
       </section>
