@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import BackButton from "@/components/common/BackButton";
@@ -87,6 +87,23 @@ type AddPlaceCandidate = {
   verifiedFact: string | null;
   place: Place;
 };
+
+const COURSE_STORAGE_PREFIX = "faveway:course";
+
+function createCourseStorageKey(course: CourseData) {
+  const contentKey = [...course.contentIds].sort((a, b) => a - b).join(",");
+  const actorKey = [...course.actorIds].sort((a, b) => a - b).join(",");
+  const initialRouteKey = course.stops.map((stop) => stop.placeId).join("-");
+
+  return [
+    COURSE_STORAGE_PREFIX,
+    `contents=${contentKey || "none"}`,
+    `actors=${actorKey || "none"}`,
+    `duration=${course.durationMinutes}`,
+    `walking=${course.maxWalkingMinutes ?? "none"}`,
+    `route=${initialRouteKey || "empty"}`,
+  ].join(":");
+}
 
 function rebuildCourse(course: CourseData, stops: CourseStop[]): CourseData {
   const recalculatedStops = stops.map((stop, index) => {
@@ -242,7 +259,51 @@ function CourseContent() {
     }
   }, [rawData]);
 
+  const storageKey = useMemo(() => {
+    if (!initialCourse) {
+      return null;
+    }
+
+    return createCourseStorageKey(initialCourse);
+  }, [initialCourse]);
+
   const [course, setCourse] = useState<CourseData | null>(initialCourse);
+
+  useEffect(() => {
+    if (!initialCourse || !storageKey) {
+      return;
+    }
+
+    const restoreTimer = window.setTimeout(() => {
+      try {
+        const storedCourse = window.localStorage.getItem(storageKey);
+
+        if (!storedCourse) {
+          return;
+        }
+
+        const parsedCourse = JSON.parse(storedCourse) as Partial<CourseData>;
+
+        if (
+          !Array.isArray(parsedCourse.stops) ||
+          parsedCourse.stops.length === 0
+        ) {
+          window.localStorage.removeItem(storageKey);
+          return;
+        }
+
+        setCourse(
+          rebuildCourse(initialCourse, parsedCourse.stops as CourseStop[]),
+        );
+      } catch {
+        window.localStorage.removeItem(storageKey);
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(restoreTimer);
+    };
+  }, [initialCourse, storageKey]);
 
   const mapStops = useMemo(() => {
     if (!course) {
@@ -280,6 +341,14 @@ function CourseContent() {
 
     return validateCourse(course);
   }, [course]);
+
+  function persistCourse(nextCourse: CourseData) {
+    if (!storageKey) {
+      return;
+    }
+
+    window.localStorage.setItem(storageKey, JSON.stringify(nextCourse));
+  }
 
   function selectCourseStop(placeId: number) {
     setSelectedPlaceId(placeId);
@@ -321,6 +390,7 @@ function CourseContent() {
 
     const nextCourse = rebuildCourse(course, nextStops);
 
+    persistCourse(nextCourse);
     setCourse(nextCourse);
 
     if (selectedPlaceId === placeId) {
@@ -361,6 +431,7 @@ function CourseContent() {
 
     const nextCourse = rebuildCourse(course, nextStops);
 
+    persistCourse(nextCourse);
     setCourse(nextCourse);
     setSelectedPlaceId(placeId);
 
@@ -370,6 +441,28 @@ function CourseContent() {
         block: "center",
       });
     }, 0);
+  }
+
+  function resetCourseChanges() {
+    if (!initialCourse || !storageKey) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "추가·삭제·순서 변경 내용을 모두 지우고 처음 생성된 코스로 돌아갈까요?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    window.localStorage.removeItem(storageKey);
+    setCourse(initialCourse);
+    setSelectedPlaceId(null);
+    setDetailTarget(null);
+    setIsAddPlaceOpen(false);
+    setAddPlaceCandidates(null);
+    setCandidateError(null);
   }
 
   async function loadAddPlaceCandidates() {
@@ -500,6 +593,7 @@ function CourseContent() {
 
     const nextCourse = rebuildCourse(course, [...course.stops, newStop]);
 
+    persistCourse(nextCourse);
     setCourse(nextCourse);
     setSelectedPlaceId(candidate.place.id);
     setAddPlaceCandidates(
@@ -576,6 +670,20 @@ function CourseContent() {
               약 {course.totalWalkingMinutes}분
             </span>
           </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-xs leading-5 text-gray-400">
+            코스 수정 내용은 이 브라우저에 자동 저장됩니다.
+          </p>
+
+          <button
+            type="button"
+            onClick={resetCourseChanges}
+            className="shrink-0 text-xs font-semibold text-gray-500 underline underline-offset-4 transition hover:text-black"
+          >
+            수정 내용 초기화
+          </button>
         </div>
       </header>
 
