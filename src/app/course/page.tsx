@@ -88,6 +88,38 @@ type AddPlaceCandidate = {
   place: Place;
 };
 
+type WalkingRoutePoint = {
+  latitude: number;
+  longitude: number;
+};
+
+type WalkingRouteSegment = {
+  fromPlaceId: number;
+  toPlaceId: number;
+  distanceMeters: number;
+  durationSeconds: number;
+  path: WalkingRoutePoint[];
+  isFallback: boolean;
+};
+
+type WalkingRouteApiSegment = {
+  fromPlaceId: number;
+  toPlaceId: number;
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  path: WalkingRoutePoint[];
+  success: boolean;
+};
+
+type WalkingRouteApiResponse = {
+  data?: {
+    segments: WalkingRouteApiSegment[];
+  };
+  message?: string;
+};
+
+type WalkingRouteStatus = "idle" | "loading" | "real" | "partial" | "fallback";
+
 const COURSE_STORAGE_PREFIX = "faveway:course";
 
 function createCourseStorageKey(course: CourseData) {
@@ -242,6 +274,12 @@ function CourseContent() {
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   const [candidateError, setCandidateError] = useState<string | null>(null);
 
+  const [walkingRouteSegments, setWalkingRouteSegments] = useState<
+    WalkingRouteSegment[]
+  >([]);
+  const [walkingRouteStatus, setWalkingRouteStatus] =
+    useState<WalkingRouteStatus>("idle");
+
   const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const rawData = searchParams.get("data");
@@ -268,6 +306,21 @@ function CourseContent() {
   }, [initialCourse]);
 
   const [course, setCourse] = useState<CourseData | null>(initialCourse);
+
+  const walkingRouteKey = useMemo(() => {
+    if (!course) {
+      return "";
+    }
+
+    return JSON.stringify(
+      course.stops.map((stop) => ({
+        placeId: stop.placeId,
+        name: stop.place.name,
+        latitude: stop.place.latitude,
+        longitude: stop.place.longitude,
+      })),
+    );
+  }, [course]);
 
   useEffect(() => {
     if (!initialCourse || !storageKey) {
@@ -304,6 +357,257 @@ function CourseContent() {
       window.clearTimeout(restoreTimer);
     };
   }, [initialCourse, storageKey]);
+
+  useEffect(() => {
+    if (!walkingRouteKey) {
+      return;
+    }
+
+    const routeStops = JSON.parse(walkingRouteKey) as Array<{
+      placeId: number;
+      name: string;
+      latitude: number | null;
+      longitude: number | null;
+    }>;
+
+    const controller = new AbortController();
+
+    const statusTimer = window.setTimeout(() => {
+      setWalkingRouteSegments([]);
+      setWalkingRouteStatus(routeStops.length >= 2 ? "loading" : "idle");
+    }, 0);
+
+    if (routeStops.length < 2) {
+      return () => {
+        window.clearTimeout(statusTimer);
+        controller.abort();
+      };
+    }
+
+    const createFallbackSegment = (
+      previousStop: (typeof routeStops)[number],
+      currentStop: (typeof routeStops)[number],
+    ): WalkingRouteSegment => {
+      const hasValidCoordinates =
+        previousStop.latitude != null &&
+        previousStop.longitude != null &&
+        currentStop.latitude != null &&
+        currentStop.longitude != null &&
+        Number.isFinite(previousStop.latitude) &&
+        Number.isFinite(previousStop.longitude) &&
+        Number.isFinite(currentStop.latitude) &&
+        Number.isFinite(currentStop.longitude);
+
+      if (!hasValidCoordinates) {
+        return {
+          fromPlaceId: previousStop.placeId,
+          toPlaceId: currentStop.placeId,
+          distanceMeters: 0,
+          durationSeconds: 0,
+          path: [],
+          isFallback: true,
+        };
+      }
+
+      const distanceKm = calculateDistanceKm(
+        {
+          latitude: previousStop.latitude!,
+          longitude: previousStop.longitude!,
+        },
+        {
+          latitude: currentStop.latitude!,
+          longitude: currentStop.longitude!,
+        },
+      );
+
+      return {
+        fromPlaceId: previousStop.placeId,
+        toPlaceId: currentStop.placeId,
+        distanceMeters: Math.round(distanceKm * 1000),
+        durationSeconds: estimateWalkingMinutes(distanceKm) * 60,
+        path: [
+          {
+            latitude: previousStop.latitude!,
+            longitude: previousStop.longitude!,
+          },
+          {
+            latitude: currentStop.latitude!,
+            longitude: currentStop.longitude!,
+          },
+        ],
+        isFallback: true,
+      };
+    };
+
+    void fetch("/api/routes/walking", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        stops: routeStops.map((stop) => ({
+          placeId: stop.placeId,
+          name: stop.name,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        })),
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = (await response.json()) as WalkingRouteApiResponse;
+
+        if (!response.ok || !body.data?.segments) {
+          throw new Error(
+            body.message ?? "실제 도보 경로를 불러오지 못했습니다.",
+          );
+        }
+
+        return body.data.segments;
+      })
+      .then((apiSegments) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        const segments = routeStops.slice(1).map((currentStop, index) => {
+          const previousStop = routeStops[index];
+
+          const apiSegment = apiSegments.find(
+            (segment) =>
+              segment.fromPlaceId === previousStop.placeId &&
+              segment.toPlaceId === currentStop.placeId,
+          );
+
+          if (
+            apiSegment?.success &&
+            apiSegment.distanceMeters != null &&
+            apiSegment.durationSeconds != null &&
+            Number.isFinite(apiSegment.distanceMeters) &&
+            Number.isFinite(apiSegment.durationSeconds) &&
+            Array.isArray(apiSegment.path) &&
+            apiSegment.path.length >= 2
+          ) {
+            return {
+              fromPlaceId: previousStop.placeId,
+              toPlaceId: currentStop.placeId,
+              distanceMeters: apiSegment.distanceMeters,
+              durationSeconds: apiSegment.durationSeconds,
+              path: apiSegment.path,
+              isFallback: false,
+            } satisfies WalkingRouteSegment;
+          }
+
+          return createFallbackSegment(previousStop, currentStop);
+        });
+
+        setWalkingRouteSegments(segments);
+
+        const fallbackCount = segments.filter(
+          (segment) => segment.isFallback,
+        ).length;
+
+        if (fallbackCount === 0) {
+          setWalkingRouteStatus("real");
+        } else if (fallbackCount === segments.length) {
+          setWalkingRouteStatus("fallback");
+        } else {
+          setWalkingRouteStatus("partial");
+        }
+
+        setCourse((currentCourse) => {
+          if (!currentCourse) {
+            return currentCourse;
+          }
+
+          const currentRouteKey = JSON.stringify(
+            currentCourse.stops.map((stop) => ({
+              placeId: stop.placeId,
+              name: stop.place.name,
+              latitude: stop.place.latitude,
+              longitude: stop.place.longitude,
+            })),
+          );
+
+          if (currentRouteKey !== walkingRouteKey) {
+            return currentCourse;
+          }
+
+          const recalculatedStops = currentCourse.stops.map((stop, index) => {
+            if (index === 0) {
+              return {
+                ...stop,
+                order: 1,
+                distanceFromPreviousKm: 0,
+                walkingMinutesFromPrevious: 0,
+              };
+            }
+
+            const segment = segments[index - 1];
+
+            return {
+              ...stop,
+              order: index + 1,
+              distanceFromPreviousKm: Number(
+                (segment.distanceMeters / 1000).toFixed(2),
+              ),
+              walkingMinutesFromPrevious: Math.ceil(
+                segment.durationSeconds / 60,
+              ),
+            };
+          });
+
+          const totalWalkingMinutes = recalculatedStops.reduce(
+            (sum, stop) => sum + stop.walkingMinutesFromPrevious,
+            0,
+          );
+
+          const totalDistanceKm = recalculatedStops.reduce(
+            (sum, stop) => sum + stop.distanceFromPreviousKm,
+            0,
+          );
+
+          const availableStayMinutes = Math.max(
+            currentCourse.durationMinutes - totalWalkingMinutes,
+            0,
+          );
+
+          const stayMinutes =
+            recalculatedStops.length > 0
+              ? Math.floor(availableStayMinutes / recalculatedStops.length)
+              : 0;
+
+          return {
+            ...currentCourse,
+            totalDistanceKm: Number(totalDistanceKm.toFixed(2)),
+            totalWalkingMinutes,
+            stops: recalculatedStops.map((stop) => ({
+              ...stop,
+              stayMinutes,
+            })),
+          };
+        });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        const fallbackSegments = routeStops
+          .slice(1)
+          .map((currentStop, index) =>
+            createFallbackSegment(routeStops[index], currentStop),
+          );
+
+        setWalkingRouteSegments(fallbackSegments);
+        setWalkingRouteStatus("fallback");
+      });
+
+    return () => {
+      window.clearTimeout(statusTimer);
+      controller.abort();
+    };
+  }, [walkingRouteKey]);
 
   const mapStops = useMemo(() => {
     if (!course) {
@@ -766,6 +1070,7 @@ function CourseContent() {
           <>
             <CourseMap
               stops={mapStops}
+              routeSegments={walkingRouteSegments}
               selectedPlaceId={selectedPlaceId}
               onSelectPlace={selectCourseStop}
             />
@@ -798,8 +1103,20 @@ function CourseContent() {
             </div>
 
             <p className="mt-3 text-xs leading-5 text-gray-400">
-              지도 위 연결선은 현재 방문 순서를 보여주는 선이며 실제 도보 경로는
-              아닙니다.
+              {walkingRouteStatus === "loading" &&
+                "실제 도보 경로와 이동 시간을 불러오는 중입니다."}
+
+              {walkingRouteStatus === "real" &&
+                "실제 도보 경로를 기준으로 이동 거리와 예상 시간을 표시합니다."}
+
+              {walkingRouteStatus === "partial" &&
+                "일부 구간은 실제 도보 경로를 사용하고, 조회에 실패한 구간은 기존 직선거리 기반 예상값을 사용합니다."}
+
+              {walkingRouteStatus === "fallback" &&
+                "실제 도보 경로를 불러오지 못해 기존 직선거리 기반 예상값을 사용합니다."}
+
+              {walkingRouteStatus === "idle" &&
+                "장소가 2개 이상이면 실제 도보 경로를 표시합니다."}
             </p>
           </>
         ) : (

@@ -11,8 +11,21 @@ export type CourseMapStop = {
   longitude: number;
 };
 
+export type CourseMapRoutePoint = {
+  latitude: number;
+  longitude: number;
+};
+
+export type CourseMapRouteSegment = {
+  fromPlaceId: number;
+  toPlaceId: number;
+  path: CourseMapRoutePoint[];
+  isFallback: boolean;
+};
+
 type CourseMapProps = {
   stops: CourseMapStop[];
+  routeSegments?: CourseMapRouteSegment[];
   selectedPlaceId?: number | null;
   onSelectPlace?: (placeId: number) => void;
 };
@@ -24,6 +37,7 @@ const SEOUL_CENTER = {
 
 export default function CourseMap({
   stops,
+  routeSegments = [],
   selectedPlaceId,
   onSelectPlace,
 }: CourseMapProps) {
@@ -41,6 +55,21 @@ export default function CourseMap({
           Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude),
       ),
     [stops],
+  );
+
+  const validRouteSegments = useMemo(
+    () =>
+      routeSegments
+        .map((segment) => ({
+          ...segment,
+          path: segment.path.filter(
+            (point) =>
+              Number.isFinite(point.latitude) &&
+              Number.isFinite(point.longitude),
+          ),
+        }))
+        .filter((segment) => segment.path.length >= 2),
+    [routeSegments],
   );
 
   function handleSdkReady() {
@@ -85,7 +114,7 @@ export default function CourseMap({
 
     const bounds = new kakao.maps.LatLngBounds();
 
-    const path = validStops.map((stop) => {
+    const stopPositions = validStops.map((stop) => {
       const position = new kakao.maps.LatLng(stop.latitude, stop.longitude);
 
       bounds.extend(position);
@@ -94,7 +123,7 @@ export default function CourseMap({
     });
 
     const overlays = validStops.map((stop, index) => {
-      const position = path[index];
+      const position = stopPositions[index];
 
       const marker = document.createElement("button");
 
@@ -139,17 +168,44 @@ export default function CourseMap({
       });
     });
 
-    const polyline =
-      path.length >= 2
-        ? new kakao.maps.Polyline({
+    const polylines: kakao.maps.Polyline[] = [];
+
+    if (validRouteSegments.length > 0) {
+      validRouteSegments.forEach((segment) => {
+        const path = segment.path.map((point) => {
+          const position = new kakao.maps.LatLng(
+            point.latitude,
+            point.longitude,
+          );
+
+          bounds.extend(position);
+
+          return position;
+        });
+
+        polylines.push(
+          new kakao.maps.Polyline({
             map,
             path,
             strokeWeight: 4,
-            strokeColor: "#4F46E5",
-            strokeOpacity: 0.75,
-            strokeStyle: "shortdash",
-          })
-        : null;
+            strokeColor: segment.isFallback ? "#9CA3AF" : "#4F46E5",
+            strokeOpacity: segment.isFallback ? 0.7 : 0.85,
+            strokeStyle: segment.isFallback ? "shortdash" : "solid",
+          }),
+        );
+      });
+    } else if (stopPositions.length >= 2) {
+      polylines.push(
+        new kakao.maps.Polyline({
+          map,
+          path: stopPositions,
+          strokeWeight: 4,
+          strokeColor: "#9CA3AF",
+          strokeOpacity: 0.7,
+          strokeStyle: "shortdash",
+        }),
+      );
+    }
 
     if (validStops.length === 1) {
       map.setCenter(initialCenter);
@@ -162,9 +218,17 @@ export default function CourseMap({
         overlay.setMap(null);
       });
 
-      polyline?.setMap(null);
+      polylines.forEach((polyline) => {
+        polyline.setMap(null);
+      });
     };
-  }, [sdkReady, validStops, selectedPlaceId, onSelectPlace]);
+  }, [
+    sdkReady,
+    validStops,
+    validRouteSegments,
+    selectedPlaceId,
+    onSelectPlace,
+  ]);
 
   if (!appKey) {
     return (
