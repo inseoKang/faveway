@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import BackButton from "@/components/common/BackButton";
+import PageHeader from "@/components/common/PageHeader";
 import ExploreMap, { type ExploreMapPlace } from "@/components/map/ExploreMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
@@ -510,27 +510,22 @@ export default function ExplorePage() {
   }, []);
 
   return (
-    <main className="mx-auto min-h-screen max-w-md p-6">
-      <header className="mb-8">
-        <BackButton className="mb-5" />
+    <main className="fw-page">
+      <PageHeader
+        eyebrow="DISCOVER THE SCENE"
+        title="이야기 속 장소를 찾아요"
+        description="작품과 배우에 연결된 촬영지를 지도에서 만나보세요."
+      />
 
-        <p className="text-sm font-medium text-gray-500">FAVEWAY</p>
-
-        <h1 className="mt-2 text-2xl font-bold">촬영지를 둘러보세요</h1>
-
-        <p className="mt-2 text-sm leading-6 text-gray-500">
-          작품이나 배우를 기준으로 실제 촬영지를 확인할 수 있어요.
-        </p>
-      </header>
-
-      <section className="mb-8 grid grid-cols-2 gap-3">
+      <section className="fw-tabs" aria-label="탐색 기준">
         <button
           type="button"
           onClick={() => void changeMode("CONTENT")}
-          className={`rounded-2xl border py-3 text-sm font-semibold ${
+          aria-pressed={mode === "CONTENT"}
+          className={`fw-tab rounded-2xl border py-3 text-sm font-semibold ${
             mode === "CONTENT"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white"
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-white"
           }`}
         >
           작품으로 찾기
@@ -539,10 +534,11 @@ export default function ExplorePage() {
         <button
           type="button"
           onClick={() => void changeMode("ACTOR")}
-          className={`rounded-2xl border py-3 text-sm font-semibold ${
+          aria-pressed={mode === "ACTOR"}
+          className={`fw-tab rounded-2xl border py-3 text-sm font-semibold ${
             mode === "ACTOR"
-              ? "border-black bg-black text-white"
-              : "border-gray-200 bg-white"
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-white"
           }`}
         >
           배우로 찾기
@@ -550,7 +546,9 @@ export default function ExplorePage() {
       </section>
 
       {loading && (
-        <p className="mb-5 text-sm text-gray-500">정보를 불러오는 중...</p>
+        <p className="fw-state mb-5" role="status">
+          정보를 불러오는 중...
+        </p>
       )}
 
       {mode === "CONTENT" && (
@@ -559,9 +557,18 @@ export default function ExplorePage() {
             type="search"
             value={contentQuery}
             onChange={(event) => setContentQuery(event.target.value)}
-            placeholder="작품 검색"
-            className="mb-5 w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none focus:border-black"
+            placeholder="작품 제목을 입력해 주세요"
+            aria-label="작품 검색"
+            className="fw-search mb-5"
           />
+
+          {!loading && !error && filteredContents.length === 0 && (
+            <p className="fw-state">
+              {contentQuery.trim()
+                ? "일치하는 작품이 없어요. 다른 제목으로 검색해 보세요."
+                : "등록된 작품이 아직 없어요."}
+            </p>
+          )}
 
           {!loading && (
             <div className="space-y-2">
@@ -570,15 +577,16 @@ export default function ExplorePage() {
                   key={content.id}
                   type="button"
                   onClick={() => void selectContent(content)}
-                  className={`w-full rounded-2xl border p-4 text-left ${
+                  aria-pressed={selectedContent?.id === content.id}
+                  className={`fw-choice w-full rounded-2xl border p-4 text-left ${
                     selectedContent?.id === content.id
-                      ? "border-black bg-gray-50"
-                      : "border-gray-200"
+                      ? "border-primary bg-blue-50"
+                      : "border-border"
                   }`}
                 >
                   <p className="font-semibold">{content.title}</p>
 
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {content.media_type}
                   </p>
                 </button>
@@ -590,7 +598,7 @@ export default function ExplorePage() {
             <section className="mt-8">
               <h2 className="font-semibold">배우로 좁혀보기</h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 선택하지 않으면 작품의 모든 촬영지를 보여줍니다.
               </p>
 
@@ -605,10 +613,11 @@ export default function ExplorePage() {
                       key={actor.id}
                       type="button"
                       onClick={() => toggleContentActor(actor)}
-                      className={`rounded-full border px-4 py-2 text-sm ${
+                      aria-pressed={selected}
+                      className={`fw-chip rounded-full border px-4 py-2 text-sm ${
                         selected
-                          ? "border-black bg-black text-white"
-                          : "border-gray-200"
+                          ? "border-primary bg-primary text-white"
+                          : "border-border"
                       }`}
                     >
                       {actor.name}
@@ -635,12 +644,13 @@ export default function ExplorePage() {
                 setActors([]);
               }
             }}
-            placeholder="배우 검색"
-            className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none focus:border-black"
+            placeholder="배우 이름을 입력해 주세요"
+            aria-label="배우 검색"
+            className="fw-search"
           />
 
           {actorLoading && (
-            <p className="mt-3 text-sm text-gray-500">검색 중...</p>
+            <p className="mt-3 text-sm text-muted-foreground">검색 중...</p>
           )}
 
           {actors.length > 0 && (
@@ -650,7 +660,8 @@ export default function ExplorePage() {
                   key={actor.id}
                   type="button"
                   onClick={() => void selectActor(actor)}
-                  className="w-full rounded-2xl border border-gray-200 p-4 text-left"
+                  aria-pressed={selectedActor?.id === actor.id}
+                  className="fw-choice w-full rounded-2xl border border-border p-4 text-left"
                 >
                   {actor.name}
                 </button>
@@ -662,7 +673,7 @@ export default function ExplorePage() {
             <section className="mt-8">
               <h2 className="font-semibold">작품으로 좁혀보기</h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 아무 작품도 선택하지 않으면 {selectedActor.name}의 전체 작품
                 촬영지를 보여줍니다.
               </p>
@@ -676,8 +687,9 @@ export default function ExplorePage() {
                       key={content.id}
                       type="button"
                       onClick={() => toggleActorContent(content.id)}
-                      className={`w-full rounded-2xl border p-4 text-left ${
-                        selected ? "border-black bg-gray-50" : "border-gray-200"
+                      aria-pressed={selected}
+                      className={`fw-choice w-full rounded-2xl border p-4 text-left ${
+                        selected ? "border-primary bg-blue-50" : "border-border"
                       }`}
                     >
                       <p className="font-semibold">{content.title}</p>
@@ -691,20 +703,22 @@ export default function ExplorePage() {
       )}
 
       {error && (
-        <p className="mt-6 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+        <p className="fw-state fw-error mt-6" role="alert">
           {error}
         </p>
       )}
 
       {placesLoading && (
-        <p className="mt-8 text-sm text-gray-500">촬영지를 불러오는 중...</p>
+        <p className="fw-state mt-8" role="status">
+          촬영지를 불러오는 중...
+        </p>
       )}
 
       {!placesLoading && places.length > 0 && (
         <section className="mt-10">
           <div className="mb-4 flex items-end justify-between">
             <div>
-              <p className="text-xs text-gray-500">FILMING LOCATIONS</p>
+              <p className="text-xs text-muted-foreground">FILMING LOCATIONS</p>
 
               <h2 className="mt-1 text-xl font-bold">
                 촬영지 {places.length}곳
@@ -719,7 +733,7 @@ export default function ExplorePage() {
           />
 
           {mapPlaces.length === 0 && (
-            <p className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-gray-500">
+            <p className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-muted-foreground">
               현재 촬영지에는 지도에 표시할 수 있는 좌표 정보가 없습니다.
               목록에서는 계속 확인할 수 있어요.
             </p>
@@ -748,33 +762,43 @@ export default function ExplorePage() {
                       place: relation.places,
                     });
                   }}
-                  className={`w-full rounded-2xl border p-5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  aria-haspopup="dialog"
+                  aria-pressed={selected}
+                  className={`fw-place-card w-full rounded-2xl border p-5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     selected
-                      ? "border-black bg-gray-50 ring-1 ring-black"
-                      : "border-gray-200 hover:border-black"
+                      ? "border-primary bg-blue-50 ring-1 ring-primary"
+                      : "border-border bg-white hover:border-primary"
                   }`}
                 >
                   {relation.content && (
-                    <p className="mb-2 text-xs font-semibold text-gray-400">
-                      {relation.content.title}
-                    </p>
+                    <p className="fw-badge mb-2">{relation.content.title}</p>
                   )}
 
                   <h3 className="font-bold">{relation.places.name}</h3>
+                  {(relation.places.latitude == null ||
+                    relation.places.longitude == null ||
+                    !Number.isFinite(relation.places.latitude) ||
+                    !Number.isFinite(relation.places.longitude)) && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      지도 위치 미등록
+                    </p>
+                  )}
 
                   {relation.places.address && (
-                    <p className="mt-2 text-sm leading-6 text-gray-500">
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
                       {relation.places.address}
                     </p>
                   )}
 
                   {relation.verified_fact && (
-                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-gray-600">
+                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted-foreground">
                       {relation.verified_fact}
                     </p>
                   )}
 
-                  <p className="mt-4 text-xs font-semibold">상세 보기 →</p>
+                  <p className="mt-4 text-xs font-semibold text-primary">
+                    장면과 장소 살펴보기 ↗
+                  </p>
                 </button>
               );
             })}
@@ -786,9 +810,7 @@ export default function ExplorePage() {
         (selectedContent || selectedActor) &&
         places.length === 0 &&
         !error && (
-          <p className="mt-8 text-sm text-gray-500">
-            조건에 맞는 촬영지가 없습니다.
-          </p>
+          <p className="fw-state mt-8">조건에 맞는 촬영지가 없습니다.</p>
         )}
 
       {detailTarget && (
