@@ -230,7 +230,7 @@ body {
   box-shadow: 0 0 0 1px var(--fw-primary);
 }
 .fw-choice[aria-pressed="true"]::after {
-  content: "��";
+  content: "\2713";
   position: absolute;
   top: 18px;
   right: 14px;
