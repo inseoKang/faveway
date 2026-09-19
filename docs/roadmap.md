@@ -1,7 +1,9 @@
 # FAVEWAY Roadmap
 
 FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색하고,
+
 사용자가 선택한 콘텐츠와 조건을 바탕으로
+
 서울 도보 여행 코스를 구성하는 개인 프로젝트입니다.
 
 현재 핵심 흐름:
@@ -279,10 +281,10 @@ Place
 - [x] 기본 데이터 오류
 - [x] 배우 검색 오류
 - [x] 배우 검색 결과 없음
-- [x] 촬영지 loading
-- [x] 촬영지 error
+- [x] 촬영지 Loading
+- [x] 촬영지 Error
 - [x] 촬영지 Retry
-- [x] 촬영지 empty
+- [x] 촬영지 Empty
 
 ### ExploreMap
 
@@ -306,41 +308,85 @@ Place
 - [x] 후보 촬영지 Error
 - [x] 후보 촬영지 Empty
 - [x] 후보 Retry
-- [x] TMAP route loading
-- [x] TMAP partial fallback
-- [x] TMAP full fallback
-- [x] invalid Course 처리
+- [x] TMAP Route Loading
+- [x] TMAP Partial Fallback
+- [x] TMAP Full Fallback
+- [x] Invalid Course 처리
 - [x] localStorage 복원 실패
 - [x] localStorage 저장 실패
 
 ### Planning
 
-- [ ] 초기 작품 / 배우 Loading 정리
-- [ ] 초기 데이터 Error
-- [ ] 후보 데이터 Empty
-- [ ] Trip 생성 Loading
-- [ ] Trip 생성 Error
-- [ ] 조건에 맞는 Course 없음
-- [ ] Retry
-- [ ] 중복 요청 방지 최종 점검
-- [ ] 버튼 disabled 조건 최종 점검
+- [x] 잘못된 진입 상태 처리
+- [x] 후보 데이터 Empty
+- [x] Trip 생성 Loading
+- [x] Trip 생성 Error
+- [x] 조건에 맞는 Course 없음
+- [x] Retry
+- [x] 네트워크 오류 처리
+- [x] 비정상 API 응답 처리
+- [x] 중복 요청 방지
+- [x] 버튼 disabled 조건 점검
+- [x] `상관없음` 선택 시 정상 활성화
 
 ---
 
 # 앞으로 할 작업
 
-## 1. Planning 상태 처리 마무리
+## 1. 데이터 부족 Fallback
 
-현재 상태 처리 작업 중 남은 주요 화면입니다.
+데이터가 부족한 경우에도
+존재하지 않는 촬영지나 장면 정보를 임의로 생성하지 않습니다.
 
-- [ ] 작품 / 배우 초기 데이터 상태 정리
-- [ ] API 오류 처리
-- [ ] Trip 생성 중 상태
-- [ ] Trip 생성 실패
-- [ ] 조건에 맞는 Course 없음
-- [ ] Retry
-- [ ] 중복 요청 차단
-- [ ] disabled 조건 검증
+상세 정책:
+
+`docs/data-fallback-policy.md`
+
+### 정책 정의
+
+- [x] 촬영지 0개 처리 기준
+- [x] 촬영지 1개 Course 허용 여부
+- [x] 촬영지 2개 이상 정상 Route 처리 기준
+- [x] 좌표 없는 장소 처리 기준
+- [x] Scene 없는 장소 처리 기준
+- [x] Episode 없는 경우 처리 기준
+- [x] Actor → Scene 관계 부족 처리 기준
+- [x] 조건에 맞는 Route가 없는 경우 처리 기준
+- [x] Course 장소 수 감소 정책
+- [x] 일반 장소 자동 추가 여부
+- [x] 자동 범위 확장 여부
+- [x] AI Recommendation 데이터 부족 원칙
+- [x] AI Docent 데이터 부족 원칙
+- [x] source 부족 처리 원칙
+
+### 구현
+
+- [x] 후보 부족 Empty 안내
+- [x] 조건에 맞는 Route 없음 안내
+- [x] 배우 기준 촬영지 없음 안내
+- [ ] 1개 장소 Course 안내 UI
+- [ ] 작품 / 배우 범위 확장 UX
+- [ ] AI Docent 정보 부족 처리
+- [ ] AI Recommendation Candidate 검증
+
+현재 원칙:
+
+```text
+데이터 부족
+≠
+AI로 사실 생성
+```
+
+```text
+Place 없음
+→ 생성하지 않음
+
+Scene 없음
+→ 추측하지 않음
+
+Candidate 부족
+→ 자동 일반 장소 추가하지 않음
+```
 
 ---
 
@@ -359,23 +405,7 @@ Place
 
 ---
 
-## 3. 데이터 부족 시 Fallback 정책
-
-촬영지 데이터가 부족하다고 해서
-AI가 장소를 생성하지 않습니다.
-
-검토:
-
-- [ ] Course 최소 장소 수 정책
-- [ ] 배우 기준 후보 부족 UX
-- [ ] 작품 범위 확장 UX
-- [ ] 일반 장소 추천 여부 결정
-- [ ] 일반 장소와 촬영지 UI 구분
-- [ ] 추천 근거 표시
-
----
-
-## 4. Data 확장 및 정제
+## 3. Data 확장 및 정제
 
 현재 도깨비 데이터를 기준으로
 핵심 데이터 구조를 검증했습니다.
@@ -394,18 +424,22 @@ AI가 장소를 생성하지 않습니다.
 다음:
 
 - [ ] 데이터 소스별 신뢰도 기준
-- [ ] Scene 없는 촬영지 저장 정책
+- [ ] Scene 없는 촬영지 저장 정책 문서 반영
 - [ ] 동일 장소 병합 기준
 - [ ] source 관리 기준
 - [ ] Import CSV 포맷 고정
-- [ ] 여신강림 데이터
-- [ ] 추가 작품 2~3개
+- [ ] 추가 작품 데이터 선정
+- [ ] 추가 작품 2~3개 구축
+- [ ] 추가 작품 Actor → Scene → Place 연결 검증
 
 ---
 
-## 5. AI Docent
+## 4. AI Docent
 
-우선순위가 높은 신규 핵심 기능입니다.
+FAVEWAY의 주요 AI 기능입니다.
+
+AI는 촬영지나 장면을 생성하지 않고
+DB에 존재하는 검증 정보를 사용해 설명을 생성합니다.
 
 ```text
 DB Fact
@@ -423,52 +457,119 @@ LLM
 Docent
 ```
 
+### 기본 구현
+
 - [ ] Docent API
 - [ ] DB → LLM 입력 구조
-- [ ] verified_fact
+- [ ] Prompt 구조
+- [ ] 응답 타입 정의
+- [ ] Place Detail과 Docent 연결
+
+### 입력 데이터
+
+- [ ] Content
+- [ ] Place
+- [ ] Actor
 - [ ] Scene
 - [ ] Episode
+- [ ] verified_fact
+- [ ] verification_status
+- [ ] source
 - [ ] 사용자 취향
-- [ ] 한국어
-- [ ] 영어
+
+### 언어
+
+- [ ] 한국어 Docent
+- [ ] 영어 Docent
+
+### 데이터 부족
+
+- [ ] Scene 없음 처리
+- [ ] Episode 없음 처리
+- [ ] verified_fact 없음 처리
+- [ ] source 없음 처리
+- [ ] 최소 근거 부족 시 생성 제한
+
+### 실패 처리
+
+- [ ] LLM Loading
+- [ ] LLM Error
+- [ ] Retry
+- [ ] LLM 실패 fallback
+- [ ] 비정상 응답 검증
+
+### TTS
+
 - [ ] 한국어 TTS
 - [ ] 영어 TTS
-- [ ] 정보 부족 정책
-- [ ] LLM 실패 fallback
+- [ ] 재생 / 일시정지 UI
+- [ ] TTS 실패 처리
 
 ---
 
-## 6. AI Recommendation
+## 5. AI Recommendation
 
 현재 Rule-based Recommendation 위에
 개인화 Ranking을 추가합니다.
 
+현재 기본 구조:
+
+```text
+DB Candidate
+↓
+Rule-based Validation
+↓
+Route Generation
+```
+
+향후:
+
+```text
+DB Candidate
+↓
+Candidate Validation
+↓
+AI Ranking
+↓
+Rule-based Route Validation
+↓
+Course
+```
+
+남은 작업:
+
 - [ ] 사용자 취향 입력
-- [ ] 여행 분위기
+- [ ] 여행 분위기 입력
 - [ ] AI Ranking
 - [ ] Candidate 점수
 - [ ] 추천 이유
 - [ ] Candidate ID Validation
+- [ ] DB에 없는 Place 결과 차단
 - [ ] Rule-based fallback
+- [ ] AI 실패 시 기존 Recommendation 유지
 
 ---
 
-## 7. Deployment
+## 6. Deployment
 
-- [ ] Production 환경변수
+- [ ] Production 환경변수 정리
 - [ ] Supabase Production 설정
-- [ ] Kakao Production Domain
+- [ ] Kakao Production Domain 설정
 - [ ] TMAP Production 설정
-- [ ] API Key 점검
+- [ ] API Key 노출 여부 점검
 - [ ] Vercel 배포
 - [ ] Production API Test
+- [ ] Production Supabase Test
+- [ ] Production Kakao Map Test
+- [ ] Production TMAP Test
 - [ ] 모바일 최종 테스트
-- [ ] 상태 UI 최종 점검
+- [ ] 주요 Empty / Error / Fallback 상태 최종 테스트
 - [ ] README 최종 업데이트
+- [ ] 배포 URL README 반영
 
 ---
 
-## 8. User Features
+## 7. User Features
 
 핵심 MVP 이후 확장합니다.
 
@@ -482,7 +583,7 @@ Docent
 - [ ] Course 상세
 - [ ] Course 삭제
 
-현재 단계에서는 localStorage를 유지합니다.
+현재 단계에서는 Course 상태 저장에 localStorage를 유지합니다.
 
 ---
 
@@ -514,6 +615,23 @@ Server
 
 ---
 
+## Course Recommendation 최적화
+
+현재는 후보 수가 제한된 상황에서
+가능한 Route Combination을 비교합니다.
+
+향후 데이터가 많아지면:
+
+- [ ] 후보 수 제한
+- [ ] 지역 Cluster
+- [ ] 가까운 장소 우선 탐색
+- [ ] Route Combination 탐색 범위 제한
+- [ ] Recommendation 성능 측정
+
+을 검토합니다.
+
+---
+
 # 이후 확장
 
 ## 여행 진행 모드
@@ -538,24 +656,56 @@ COMPLETED
 
 ---
 
+## 일반 장소 추천
+
+현재 MVP에서는 촬영지가 부족하다는 이유로
+일반 관광지를 자동으로 Course에 추가하지 않습니다.
+
+향후 추가한다면 반드시 촬영지와 구분합니다.
+
+```text
+VERIFIED_FILMING_LOCATION
+
+GENERAL_PLACE
+```
+
+필요 작업:
+
+- [ ] 일반 장소 데이터 소스 선정
+- [ ] 장소 타입 구분
+- [ ] 촬영지 / 일반 장소 UI 구분
+- [ ] 사용자가 직접 범위 확장을 선택하도록 UX 제공
+
+---
+
 # 현재 개발 우선순위
 
 ```text
-1. Planning 상태 처리 마무리
+1. 데이터 부족 Fallback 구현
 ↓
 2. 촬영지 상세 UX 보완
 ↓
-3. 데이터 부족 Fallback 정책
+3. AI Docent
 ↓
 4. Data 확장 및 정제
 ↓
-5. AI Docent
+5. AI Recommendation
 ↓
-6. AI Recommendation
+6. Deployment
 ↓
-7. Deployment
+7. User Features
+```
+
+현재 가장 가까운 다음 작업:
+
+```text
+1개 장소 Course 안내 UI
 ↓
-8. User Features
+작품 / 배우 범위 확장 UX
+↓
+촬영지 상세 UX 보완
+↓
+AI Docent 설계 및 구현
 ```
 
 ---
@@ -566,6 +716,11 @@ COMPLETED
 
 DB에 존재하는 실제 장소만 사용합니다.
 
+```text
+Place 없음
+→ AI 생성 X
+```
+
 ## 2. 배우와 촬영지는 Scene을 통해 연결한다
 
 ```text
@@ -574,12 +729,100 @@ Actor
 → Place
 ```
 
+작품 출연 관계만으로
+모든 촬영지를 배우 관련 장소로 판단하지 않습니다.
+
 ## 3. 검증된 정보를 추천 근거로 사용한다
+
+가능한 경우 다음 정보를 기반으로 합니다.
+
+```text
+Content
+Scene
+Actor
+Place
+verified_fact
+verification_status
+source
+```
 
 ## 4. AI는 설명과 개인화에 사용한다
 
-## 5. TMAP 실패가 Course 전체 실패가 되지 않게 한다
+```text
+DB Fact
+↓
+AI Explanation / Personalization
+```
 
-## 6. 저장 상태와 재계산 상태를 구분한다
+AI를 사실 데이터의 원천으로 사용하지 않습니다.
 
-## 7. 데이터가 없으면 없는 상태를 그대로 보여준다
+## 5. 데이터가 없으면 없는 상태를 그대로 보여준다
+
+```text
+No Data
+≠
+AI Generation
+```
+
+Scene, Episode, source 등의 정보가 없다면
+임의로 만들어 표시하지 않습니다.
+
+## 6. 데이터 부족과 시스템 오류를 구분한다
+
+```text
+정상 조회 + 결과 없음
+→ Empty
+
+API / Network 실패
+→ Error
+```
+
+## 7. 사용할 수 있는 데이터는 계속 사용한다
+
+```text
+Scene 없음
+≠
+Place 사용 불가
+
+좌표 없음
+≠
+Place 삭제
+```
+
+기능에 필요한 데이터가 부족한 경우에만
+해당 기능의 범위를 제한합니다.
+
+## 8. TMAP 실패가 Course 전체 실패가 되지 않게 한다
+
+```text
+TMAP 실패
+→ 해당 구간 Haversine fallback
+```
+
+일부 외부 API 실패 때문에
+Course 전체를 사용할 수 없게 만들지 않습니다.
+
+## 9. 저장 상태와 재계산 상태를 구분한다
+
+localStorage에는 사용자가 변경한 Course 상태를 저장합니다.
+
+```text
+저장
+→ Stops / Order
+
+재계산
+→ TMAP Route / Distance / Walking Time
+```
+
+외부 API 결과는 필요할 때 다시 조회합니다.
+
+## 10. 자동 범위 확장보다 사용자 선택을 우선한다
+
+```text
+Candidate 부족
+→ 임의 조건 변경 X
+→ 사용자에게 선택권 제공
+```
+
+사용자가 선택하지 않은 작품이나 일반 장소를
+애플리케이션이 자동으로 추가하지 않습니다.
