@@ -97,7 +97,10 @@ function hasCoordinates(
   relation: PlaceRelation,
 ): relation is CoordinatePlaceRelation {
   return (
-    relation.places.latitude !== null && relation.places.longitude !== null
+    relation.places.latitude !== null &&
+    relation.places.longitude !== null &&
+    Number.isFinite(relation.places.latitude) &&
+    Number.isFinite(relation.places.longitude)
   );
 }
 
@@ -337,6 +340,7 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         {
+          code: "INVALID_TRIP_CONDITIONS",
           message: "잘못된 여행 조건입니다.",
         },
         {
@@ -384,6 +388,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
+          code: "TRIP_CANDIDATES_FETCH_FAILED",
           message: "촬영지 후보를 불러오지 못했습니다.",
         },
         {
@@ -420,6 +425,7 @@ export async function POST(request: NextRequest) {
     if (candidateRelations.length === 0) {
       return NextResponse.json(
         {
+          code: "NO_FILMING_LOCATIONS",
           message:
             actorIds.length > 0
               ? "선택한 배우가 등장한 장면과 연결된 촬영지가 없습니다."
@@ -436,6 +442,7 @@ export async function POST(request: NextRequest) {
     if (coordinatePlaces.length === 0) {
       return NextResponse.json(
         {
+          code: "NO_COORDINATED_FILMING_LOCATIONS",
           message: "좌표가 등록된 촬영지가 없어 코스를 생성할 수 없습니다.",
         },
         {
@@ -453,13 +460,14 @@ export async function POST(request: NextRequest) {
     if (!route) {
       return NextResponse.json(
         {
+          code: "NO_AVAILABLE_ROUTE",
           message:
             maxWalkingMinutes !== null
               ? `한 번에 ${maxWalkingMinutes}분 이내로 이동할 수 있는 코스를 찾지 못했습니다.`
               : "선택한 시간 안에 방문 가능한 코스를 만들 수 없습니다.",
         },
         {
-          status: 400,
+          status: 422,
         },
       );
     }
@@ -530,6 +538,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
+        code: "TRIP_CREATION_FAILED",
         message: "코스를 생성하는 중 오류가 발생했습니다.",
       },
       {
