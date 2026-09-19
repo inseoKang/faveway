@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import PageHeader from "@/components/common/PageHeader";
+import StateFeedback from "@/components/common/StateFeedback";
 import ExploreMap, { type ExploreMapPlace } from "@/components/map/ExploreMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
@@ -86,7 +87,9 @@ export default function ExplorePage() {
 
   const [placesLoading, setPlacesLoading] = useState(false);
 
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [actorError, setActorError] = useState("");
+  const [placesError, setPlacesError] = useState("");
 
   /**
    * 작품 전체 목록 조회
@@ -97,7 +100,8 @@ export default function ExplorePage() {
   async function fetchAllContents() {
     try {
       setLoading(true);
-      setError("");
+      setPageError("");
+      setPlacesError("");
 
       const response = await fetch("/api/contents");
 
@@ -109,7 +113,7 @@ export default function ExplorePage() {
 
       setContents(result.data ?? []);
     } catch (reason) {
-      setError(
+      setPageError(
         reason instanceof Error
           ? reason.message
           : "작품을 불러오지 못했습니다.",
@@ -145,7 +149,7 @@ export default function ExplorePage() {
         }
       } catch (reason) {
         if (!cancelled) {
-          setError(
+          setPageError(
             reason instanceof Error
               ? reason.message
               : "작품을 불러오지 못했습니다.",
@@ -187,7 +191,7 @@ export default function ExplorePage() {
     const timer = window.setTimeout(async () => {
       try {
         setActorLoading(true);
-        setError("");
+        setActorError("");
 
         const response = await fetch(
           `/api/actors/search?q=${encodeURIComponent(query)}`,
@@ -211,7 +215,7 @@ export default function ExplorePage() {
         }
 
         if (!controller.signal.aborted) {
-          setError(
+          setActorError(
             reason instanceof Error
               ? reason.message
               : "배우를 검색하지 못했습니다.",
@@ -245,7 +249,7 @@ export default function ExplorePage() {
   async function fetchContentPlaces(contentId: number, actorIds: number[]) {
     try {
       setPlacesLoading(true);
-      setError("");
+      setPlacesError("");
 
       const params = new URLSearchParams();
 
@@ -273,7 +277,7 @@ export default function ExplorePage() {
       setPlaces([]);
       setSelectedPlaceId(null);
 
-      setError(
+      setPlacesError(
         reason instanceof Error
           ? reason.message
           : "촬영지를 불러오지 못했습니다.",
@@ -286,7 +290,7 @@ export default function ExplorePage() {
   async function fetchActorPlaces(actorId: number, contentIds: number[]) {
     try {
       setPlacesLoading(true);
-      setError("");
+      setPlacesError("");
 
       const params = new URLSearchParams();
 
@@ -314,7 +318,7 @@ export default function ExplorePage() {
       setPlaces([]);
       setSelectedPlaceId(null);
 
-      setError(
+      setPlacesError(
         reason instanceof Error
           ? reason.message
           : "촬영지를 불러오지 못했습니다.",
@@ -337,7 +341,7 @@ export default function ExplorePage() {
         fetchContentPlaces(content.id, []),
       ]);
     } catch (reason) {
-      setError(
+      setPageError(
         reason instanceof Error
           ? reason.message
           : "정보를 불러오지 못했습니다.",
@@ -374,7 +378,8 @@ export default function ExplorePage() {
       setSelectedPlaceId(null);
 
       setLoading(true);
-      setError("");
+      setPageError("");
+      setPlacesError("");
 
       const response = await fetch(`/api/actors/${actor.id}/contents`);
 
@@ -390,7 +395,7 @@ export default function ExplorePage() {
 
       await fetchActorPlaces(actor.id, []);
     } catch (reason) {
-      setError(
+      setPageError(
         reason instanceof Error
           ? reason.message
           : "정보를 불러오지 못했습니다.",
@@ -431,7 +436,9 @@ export default function ExplorePage() {
     setActors([]);
 
     setContentQuery("");
-    setError("");
+    setPageError("");
+    setActorError("");
+    setPlacesError("");
 
     if (nextMode === "CONTENT") {
       await fetchAllContents();
@@ -546,9 +553,22 @@ export default function ExplorePage() {
       </section>
 
       {loading && (
-        <p className="fw-state mb-5" role="status">
-          정보를 불러오는 중...
-        </p>
+        <StateFeedback
+          title="정보를 불러오고 있어요."
+          description="작품과 배우 정보를 준비하고 있습니다."
+          className="mb-5"
+        />
+      )}
+
+      {pageError && (
+        <StateFeedback
+          tone="error"
+          title="기본 정보를 불러오지 못했어요."
+          description={pageError}
+          actionLabel="다시 시도"
+          onAction={() => void fetchAllContents()}
+          className="mb-5"
+        />
       )}
 
       {mode === "CONTENT" && (
@@ -562,7 +582,7 @@ export default function ExplorePage() {
             className="fw-search mb-5"
           />
 
-          {!loading && !error && filteredContents.length === 0 && (
+          {!loading && !pageError && filteredContents.length === 0 && (
             <p className="fw-state">
               {contentQuery.trim()
                 ? "일치하는 작품이 없어요. 다른 제목으로 검색해 보세요."
@@ -650,8 +670,31 @@ export default function ExplorePage() {
           />
 
           {actorLoading && (
-            <p className="mt-3 text-sm text-muted-foreground">검색 중...</p>
+            <StateFeedback
+              title="배우를 검색하고 있어요."
+              className="mt-3"
+            />
           )}
+
+          {actorError && (
+            <StateFeedback
+              tone="error"
+              title="배우 검색에 실패했어요."
+              description={actorError}
+              className="mt-3"
+            />
+          )}
+
+          {!actorLoading &&
+            !actorError &&
+            actorQuery.trim() &&
+            actors.length === 0 && (
+              <StateFeedback
+                title="일치하는 배우가 없어요."
+                description="다른 이름이나 더 짧은 검색어로 다시 찾아보세요."
+                className="mt-3"
+              />
+            )}
 
           {actors.length > 0 && (
             <div className="mt-3 space-y-2">
@@ -702,16 +745,35 @@ export default function ExplorePage() {
         </>
       )}
 
-      {error && (
-        <p className="fw-state fw-error mt-6" role="alert">
-          {error}
-        </p>
+      {placesError && (
+        <StateFeedback
+          tone="error"
+          title="촬영지를 불러오지 못했어요."
+          description={placesError}
+          actionLabel="다시 시도"
+          onAction={() => {
+            if (selectedContent) {
+              void fetchContentPlaces(
+                selectedContent.id,
+                selectedActors.map((actor) => actor.id),
+              );
+              return;
+            }
+
+            if (selectedActor) {
+              void fetchActorPlaces(selectedActor.id, selectedActorContentIds);
+            }
+          }}
+          className="mt-6"
+        />
       )}
 
       {placesLoading && (
-        <p className="fw-state mt-8" role="status">
-          촬영지를 불러오는 중...
-        </p>
+        <StateFeedback
+          title="촬영지를 불러오고 있어요."
+          description="선택한 작품과 배우 조건에 맞는 장소를 확인하고 있습니다."
+          className="mt-8"
+        />
       )}
 
       {!placesLoading && places.length > 0 && (
@@ -731,13 +793,6 @@ export default function ExplorePage() {
             selectedPlaceId={selectedPlaceId}
             onSelectPlace={selectPlaceFromMap}
           />
-
-          {mapPlaces.length === 0 && (
-            <p className="mt-3 rounded-2xl bg-gray-50 p-4 text-sm leading-6 text-muted-foreground">
-              현재 촬영지에는 지도에 표시할 수 있는 좌표 정보가 없습니다.
-              목록에서는 계속 확인할 수 있어요.
-            </p>
-          )}
 
           <div className="mt-5 space-y-3">
             {places.map((relation) => {
@@ -809,8 +864,12 @@ export default function ExplorePage() {
       {!placesLoading &&
         (selectedContent || selectedActor) &&
         places.length === 0 &&
-        !error && (
-          <p className="fw-state mt-8">조건에 맞는 촬영지가 없습니다.</p>
+        !placesError && (
+          <StateFeedback
+            title="조건에 맞는 촬영지가 없어요."
+            description="배우 또는 작품 선택 범위를 넓혀 다시 확인해 보세요."
+            className="mt-8"
+          />
         )}
 
       {detailTarget && (
