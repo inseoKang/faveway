@@ -1,11 +1,26 @@
 # FAVEWAY Roadmap
 
 FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색하고,
-사용자가 선택한 콘텐츠와 조건을 바탕으로 도보 여행 코스를 구성하는 개인 프로젝트입니다.
+사용자가 선택한 콘텐츠와 조건을 바탕으로
+서울 도보 여행 코스를 구성하는 개인 프로젝트입니다.
 
-현재는 서울 지역의 검증된 촬영지 데이터를 기반으로
-콘텐츠 탐색 → 배우 탐색 → 촬영지 조회 → 코스 생성 → 코스 편집 → 지도 경로 확인
-흐름을 우선 구현하고 있습니다.
+현재 핵심 흐름:
+
+```text
+콘텐츠 / 배우 탐색
+↓
+촬영지 조회
+↓
+여행 조건 입력
+↓
+Course 생성
+↓
+실제 도보 경로 조회
+↓
+Course 편집
+↓
+지도 / Summary 갱신
+```
 
 ---
 
@@ -25,15 +40,18 @@ FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색�
 ## UI / Design System
 
 - [x] FAVEWAY 공통 디자인 스타일 정리
-- [x] `globals.css` 기준 공통 색상 / 여백 / 버튼 / 카드 스타일 정리
-- [x] 공통 BackButton 스타일 정리
-- [x] 공통 PageHeader 추가
-- [x] Home / Explore / Plan / Planning 디자인 통일
-- [x] Course 화면 디자인 정리
+- [x] 공통 색상 / 여백 / 버튼 / 카드 스타일 정리
+- [x] 공통 BackButton
+- [x] 공통 PageHeader
+- [x] Home 디자인 정리
+- [x] Explore 디자인 정리
+- [x] Plan 디자인 정리
+- [x] Planning 디자인 정리
+- [x] Course 디자인 정리
 - [x] PlaceDetailDialog UI 개선
-- [x] CourseMap / ExploreMap UI 스타일 통일
-- [x] 모바일 Course 장소 chip 레이아웃 오류 수정
-- [x] 좁은 화면에서 장소 chip 버튼 단위 줄바꿈 처리
+- [x] CourseMap / ExploreMap UI 통일
+- [x] 모바일 Course chip 레이아웃 수정
+- [x] 좁은 화면 버튼 줄바꿈 문제 수정
 
 ---
 
@@ -59,16 +77,23 @@ FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색�
 - [x] 배우 + 작품 촬영지 필터
 - [x] 동일 작품 + 동일 장소 중복 제거
 - [x] 촬영지 상세 Dialog
-- [x] 장면 정보 표시
-- [x] 에피소드 정보 표시
-- [x] 관련 배우 표시
+- [x] Scene 설명 표시
+- [x] Episode 표시
+- [x] Scene 등장 배우 표시
 - [x] 주소 표시
-- [x] 검증 상태 표시
-- [x] 출처 표시
+- [x] verified_fact 표시
+- [x] verification_status 표시
+- [x] source_type 표시
+- [x] source_url 표시
+- [x] verified_at 표시
+- [x] Kakao Map 위치 링크
+- [x] 좌표가 없는 경우 주소 검색 fallback
+- [x] 정보 없음 Empty 처리
+- [x] 상세 API Retry
 
-### 배우 촬영지 관계
+---
 
-배우 기반 촬영지는 작품에 출연했다는 이유만으로 모든 촬영지를 반환하지 않습니다.
+## Actor → Scene → Place
 
 ```text
 Actor
@@ -82,36 +107,22 @@ scene_places
 Place
 ```
 
-- [x] Actor → Scene → Place 관계 기반 조회
-- [x] 배우가 실제 연결된 장면의 촬영지만 반환
+- [x] 배우 실제 등장 Scene 기반 조회
+- [x] 작품 출연 관계만으로 모든 장소를 반환하지 않음
 - [x] 작품 필터와 함께 사용 가능
 
 ---
 
 ## Explore Map
 
-- [x] 촬영지 둘러보기 페이지 Kakao Map 추가
-- [x] 조회된 촬영지 Marker 표시
-- [x] Marker 클릭 → 장소 정보 선택
-- [x] 장소 카드 클릭 → Marker 선택
-- [x] 작품별 촬영지 지도 표시
-- [x] 배우별 촬영지 지도 표시
-- [x] 현재 조회 결과 기준 Bounds 조정
-- [x] 지도와 촬영지 목록 상태 동기화
-
-현재 흐름:
-
-```text
-작품 또는 배우 선택
-↓
-촬영지 조회
-↓
-목록 + 지도
-↓
-장소 선택
-↓
-촬영지 상세 확인
-```
+- [x] Kakao Map 표시
+- [x] 촬영지 Marker
+- [x] Marker → 장소 카드 선택
+- [x] 장소 카드 → Marker 선택
+- [x] 작품 기준 지도
+- [x] 배우 기준 지도
+- [x] Bounds 조정
+- [x] 지도 / 목록 상태 동기화
 
 ---
 
@@ -119,450 +130,282 @@ Place
 
 - [x] 여행 가능 시간 입력
 - [x] 최대 도보 시간 입력
-- [x] 도보 제한 없음 지원
-- [x] 단일 작품 코스 생성
-- [x] 복수 작품 코스 생성
-- [x] 복수 배우 OR 조건 처리
-- [x] Actor → Scene → Place 후보 필터링
-- [x] 촬영지 중복 제거
-- [x] Haversine 기반 장소 간 거리 계산
+- [x] 도보 제한 없음
+- [x] 단일 작품 Course
+- [x] 복수 작품 Course
+- [x] 복수 배우 OR 조건
+- [x] Actor → Scene → Place 후보 필터
+- [x] 활성 장소 필터
+- [x] 좌표 검증
+- [x] 중복 제거
+- [x] Route Combination
+- [x] Haversine 초기 거리 계산
 - [x] 예상 도보 시간 계산
-- [x] 장소 조합 기반 코스 구성
 - [x] 전체 여행 시간 검증
 - [x] 구간별 최대 도보 시간 검증
-- [x] 장소별 체류 시간 계산
+- [x] 체류 시간 계산
+- [x] 거리 최소 Route 선택
 
-### 현재 코스 생성 방식
+현재 최대 장소 수:
 
 ```text
-DB 촬영지 후보
-↓
-Actor → Scene → Place 필터
-↓
-후보 장소 정리
-↓
-Haversine 거리 계산
-↓
-예상 도보 시간 계산
-↓
-코스 조합
-↓
-여행 시간 검증
-↓
-도보 조건 검증
-↓
-Course 생성
+3시간 → 2곳
+4시간 → 3곳
+5시간 → 4곳
 ```
-
-> 촬영지 후보 자체는 반드시 DB에 존재하는 데이터를 사용합니다.
-> AI가 존재하지 않는 촬영지를 임의로 생성하지 않습니다.
 
 ---
 
 ## Course Editing
 
-- [x] 코스 장소 삭제
+- [x] 장소 삭제
 - [x] 최소 1개 장소 유지
-- [x] 장소 순서 위로 이동
-- [x] 장소 순서 아래로 이동
-- [x] 순서 변경 후 order 재계산
-- [x] 순서 변경 후 거리 재계산
-- [x] 순서 변경 후 도보 시간 재계산
-- [x] 전체 거리 재계산
-- [x] 전체 이동 시간 재계산
+- [x] 장소 추가
+- [x] 순서 위로 이동
+- [x] 순서 아래로 이동
+- [x] order 재계산
+- [x] 거리 재계산
+- [x] 도보 시간 재계산
 - [x] 체류 시간 재계산
-- [x] 여행 가능 시간 초과 검증
-- [x] 최대 도보 시간 초과 검증
-- [x] 조건이 다시 충족되면 경고 자동 해제
-- [x] 지도와 코스 편집 상태 동기화
+- [x] 전체 거리 갱신
+- [x] 전체 이동 시간 갱신
+- [x] 여행 가능 시간 검증
+- [x] 최대 도보 시간 검증
+- [x] 조건 충족 시 경고 자동 해제
+- [x] 지도와 편집 상태 동기화
 
 ---
 
 ## Course Place Addition
 
-- [x] 현재 코스에 추가 가능한 촬영지 조회
-- [x] 현재 선택한 작품 / 배우 조건 유지
-- [x] 현재 코스에 존재하는 장소 제외
-- [x] place_id 기준 후보 중복 제거
-- [x] 장소 추가
-- [x] 추가 장소를 코스 마지막에 삽입
-- [x] 기존 순서 변경 기능으로 위치 조정
-- [x] 추가 후 거리 재계산
-- [x] 추가 후 도보 시간 재계산
-- [x] 추가 후 체류 시간 재계산
-- [x] 추가 후 조건 검증
+- [x] 추가 가능한 촬영지 조회
+- [x] 현재 작품 조건 유지
+- [x] 현재 배우 조건 유지
+- [x] 현재 Course 장소 제외
+- [x] place_id 중복 제거
+- [x] 비활성 장소 제외
+- [x] 좌표 없는 후보 제외
+- [x] Course 마지막에 추가
+- [x] 추가 후 Route 재계산
+- [x] 추가 후 Summary 갱신
 - [x] 추가 후 지도 갱신
 
 ---
 
 ## Course State Persistence
 
-- [x] 코스 편집 상태 localStorage 저장
+- [x] localStorage 저장
 - [x] 장소 추가 상태 유지
 - [x] 장소 삭제 상태 유지
-- [x] 장소 순서 변경 상태 유지
-- [x] 새로고침 후 편집 코스 복원
-- [x] 코스별 Storage Key 분리
+- [x] 장소 순서 유지
+- [x] 새로고침 후 복원
+- [x] Course별 Storage Key
 - [x] 변경사항 초기화
-- [x] 초기 Course 상태로 복구
-
-현재 코스 편집 결과는 브라우저의 `localStorage`에 저장합니다.
-
-실제 서버 저장 기능을 추가하기 전까지는
-브라우저 단위 임시 저장 방식으로 코스 편집 상태를 유지합니다.
+- [x] 초기 Course 복원
+- [x] TMAP Route 데이터는 저장하지 않음
+- [x] 복원 후 실제 Route 재조회
+- [x] localStorage 복원 실패 Warning
+- [x] localStorage 저장 실패 Warning
 
 ---
 
 ## Kakao Map
 
-- [x] Kakao Maps JavaScript SDK 연동
-- [x] Course 지도 표시
-- [x] 촬영지별 번호 Marker
-- [x] Course 전체 장소가 보이도록 Bounds 조정
-- [x] Marker 클릭 → Course 카드 선택
-- [x] Course 카드 클릭 → Marker 선택
-- [x] 선택된 장소 시각적 강조
-- [x] Course 편집 결과 지도 즉시 반영
+- [x] Kakao Maps JavaScript SDK
+- [x] Course 지도
+- [x] Explore 지도
+- [x] 번호 Marker
+- [x] Bounds
+- [x] Marker / Card 선택 동기화
+- [x] 선택 장소 강조
+- [x] Course 편집 결과 지도 반영
+- [x] 지도 로딩 상태
+- [x] 지도 Error 상태
+- [x] 지도 실패 시 목록 유지
 
 ---
 
-## 실제 도보 경로
+## TMAP Actual Walking Route
 
-### TMAP 보행자 경로 API
+- [x] TMAP Pedestrian API
+- [x] appKey 서버 환경변수
+- [x] Route Handler 경유
+- [x] Client appKey 노출 방지
+- [x] Course 전체 Stops 1회 요청
+- [x] 서버 인접 구간 분리
+- [x] 실제 거리
+- [x] 실제 이동 시간
+- [x] 실제 Path
+- [x] Course Summary 반영
+- [x] Kakao Polyline 반영
+- [x] 장소 추가 후 재조회
+- [x] 장소 삭제 후 재조회
+- [x] 순서 변경 후 재조회
+- [x] 초기화 후 재조회
+- [x] localStorage 복원 후 재조회
 
-- [x] 실제 보행자 Route API 조사
-- [x] TMAP 앱 / 경로안내 상품 설정
-- [x] TMAP appKey 서버 환경변수 관리
-- [x] Next Route Handler를 통한 TMAP 호출
-- [x] 브라우저에 TMAP appKey 노출 방지
+---
 
-### 실제 경로 계산
+## TMAP Fallback
 
-- [x] 인접 장소 간 실제 보행자 경로 조회
-- [x] Course 전체 장소를 한 번의 `/api/routes/walking` 요청으로 전달
-- [x] 서버에서 각 인접 구간 순차 처리
-- [x] TMAP 실제 거리 반영
-- [x] TMAP 실제 이동 시간 반영
-- [x] 실제 이동 시간을 Course 검증에 반영
-- [x] 실제 이동 거리를 Course Summary에 반영
+- [x] 실패 구간 감지
+- [x] 실패 구간만 Haversine
+- [x] 실패 구간 예상 도보 시간
+- [x] 실패 구간 직선 Polyline
+- [x] 일부 실패 상태 구분
+- [x] 전체 실패 상태 구분
+- [x] Course 전체 장애 방지
+- [x] 좌표 없는 구간만 개별 실패 처리
+- [x] 정상 구간 TMAP 조회 유지
+- [x] fallback 값을 Summary에 반영
 
-현재 흐름:
+---
 
-```text
-Course Stops
-↓
-POST /api/routes/walking
-↓
-서버에서 인접 구간 분리
+## Loading / Empty / Error / Retry
 
-1 → 2
-2 → 3
-3 → 4
+### 공통
 
-↓
-TMAP 보행자 경로 API
-↓
-실제 거리 + 실제 시간 + Path
-↓
-Course 갱신
-↓
-Kakao Map Polyline 갱신
-```
+- [x] StateFeedback
+- [x] InlineWarning
+- [x] Loading 기준
+- [x] Empty 기준
+- [x] Error 기준
+- [x] Retry 상태
+- [x] Blocking / Non-blocking 구분
+- [x] Partial Failure UI
 
-### 지도 경로
+### Explore
 
-- [x] 장소 간 단순 직선 연결 제거
-- [x] 실제 보행자 이동 경로 Polyline 표시
-- [x] 도로 / 보행로를 따라 경로 표시
-- [x] 장소 추가 시 실제 경로 재조회
-- [x] 장소 삭제 시 실제 경로 재조회
-- [x] 장소 순서 변경 시 실제 경로 재조회
-- [x] 코스 초기화 시 실제 경로 재조회
-- [x] 새로고침 후 Course 복원 → 실제 경로 재조회
+- [x] 기본 데이터 오류
+- [x] 배우 검색 오류
+- [x] 배우 검색 결과 없음
+- [x] 촬영지 loading
+- [x] 촬영지 error
+- [x] 촬영지 Retry
+- [x] 촬영지 empty
 
-### Fallback
+### ExploreMap
 
-- [x] TMAP 요청 실패 구간 감지
-- [x] 실패한 구간만 Haversine 기반 거리 사용
-- [x] 실패한 구간만 기존 예상 도보 시간 사용
-- [x] 실패 구간을 직선 경로로 표시
-- [x] 일부 실패 / 전체 실패 상태 구분
-- [x] 외부 Route API 장애가 Course 전체 장애로 이어지지 않도록 처리
+- [x] SDK Loading
+- [x] SDK Error
+- [x] 좌표 없음
+- [x] 지도 실패 시 목록 유지
 
-> TMAP에서 받은 실제 경로 데이터는 localStorage나 DB에 장기 저장하지 않고,
-> Course 화면에서 필요할 때 다시 조회합니다.
+### CourseMap
+
+- [x] SDK Loading
+- [x] SDK Error
+- [x] 지도 실패 시 Course 유지
+
+### Course
+
+- [x] 초기 Loading
+- [x] Course 정보 없음
+- [x] 잘못된 Course 데이터
+- [x] 후보 촬영지 Loading
+- [x] 후보 촬영지 Error
+- [x] 후보 촬영지 Empty
+- [x] 후보 Retry
+- [x] TMAP route loading
+- [x] TMAP partial fallback
+- [x] TMAP full fallback
+- [x] invalid Course 처리
+- [x] localStorage 복원 실패
+- [x] localStorage 저장 실패
+
+### Planning
+
+- [ ] 초기 작품 / 배우 Loading 정리
+- [ ] 초기 데이터 Error
+- [ ] 후보 데이터 Empty
+- [ ] Trip 생성 Loading
+- [ ] Trip 생성 Error
+- [ ] 조건에 맞는 Course 없음
+- [ ] Retry
+- [ ] 중복 요청 방지 최종 점검
+- [ ] 버튼 disabled 조건 최종 점검
 
 ---
 
 # 앞으로 할 작업
 
-## 1. 촬영지 상세 정보 고도화
+## 1. Planning 상태 처리 마무리
 
-현재 기본 장소 정보와 Scene 정보를 더 풍부하게 확장합니다.
+현재 상태 처리 작업 중 남은 주요 화면입니다.
 
-- [ ] 장면 설명 UI 개선
-- [ ] Episode 표시 방식 개선
-- [ ] 배우 정보 표시 개선
-- [ ] 작품 정보 표시 개선
-- [ ] verified_fact 활용
-- [ ] verification_status 표현 개선
-- [ ] source_url UX 개선
-- [ ] 촬영 장면과 장소 관계를 더 명확하게 표시
+- [ ] 작품 / 배우 초기 데이터 상태 정리
+- [ ] API 오류 처리
+- [ ] Trip 생성 중 상태
+- [ ] Trip 생성 실패
+- [ ] 조건에 맞는 Course 없음
+- [ ] Retry
+- [ ] 중복 요청 차단
+- [ ] disabled 조건 검증
+
+---
+
+## 2. 촬영지 상세 UX 고도화
+
+기본 데이터 표시는 이미 구현되어 있습니다.
+
+남은 작업:
+
+- [ ] Scene / Episode 표현 방식 개선
+- [ ] Actor → Scene → Place 관계를 더 직관적으로 표시
+- [ ] Verification UI 개선
+- [ ] Source UX 개선
 - [ ] 장소 이미지 데이터 검토
 - [ ] 장소 이미지 표시
 
-장소 상세에서 사용자가 다음을 이해할 수 있어야 합니다.
-
-```text
-왜 이 장소가 추천됐는가?
-↓
-어떤 작품인가?
-↓
-어떤 장면인가?
-↓
-어떤 배우와 관련됐는가?
-↓
-정보의 근거는 무엇인가?
-```
-
 ---
 
-## 2. Loading / Empty / Error / Retry 상태 정리
+## 3. 데이터 부족 시 Fallback 정책
 
-현재 여러 데이터 소스와 외부 API를 함께 사용하고 있어
-전체 페이지 실패와 일부 기능 실패를 구분할 필요가 있습니다.
+촬영지 데이터가 부족하다고 해서
+AI가 장소를 생성하지 않습니다.
 
-대상:
+검토:
 
-- Supabase
-- Kakao Map
-- TMAP
-- 향후 AI API
-
-구현 항목:
-
-- [ ] 공통 Loading 상태 기준 정의
-- [ ] Empty 상태 기준 정의
-- [ ] Error 상태 기준 정의
-- [ ] Retry 가능한 오류 / 불가능한 오류 구분
-- [ ] API별 오류 메시지 정리
-- [ ] 부분 실패 UI 정의
-- [ ] 전체 실패 UI 정의
-- [ ] 네트워크 오류 처리
-- [ ] 지도 로딩 실패 처리
-- [ ] TMAP 부분 실패 상태 표현 개선
-
-예:
-
-```text
-TMAP 실패
-≠
-Course 전체 실패
-```
-
-서비스의 핵심 데이터는 유지하면서
-실패한 기능만 fallback 또는 재시도할 수 있도록 구성합니다.
-
----
-
-## 3. 데이터 부족 시 Fallback
-
-촬영지 데이터가 부족한 경우 AI가 존재하지 않는 장소를 생성하지 않도록 합니다.
-
-예상 흐름:
-
-```text
-충분한 촬영지 존재
-↓
-촬영지 기반 Course 생성
-```
-
-```text
-촬영지 부족
-↓
-사용자에게 범위 확장 여부 안내
-또는
-↓
-주변 일반 장소 추천
-```
-
-검토 항목:
-
-- [ ] 촬영지 부족 기준 정의
-- [ ] Course 생성 최소 장소 수 정의
-- [ ] 배우 기준 데이터 부족 UX
+- [ ] Course 최소 장소 수 정책
+- [ ] 배우 기준 후보 부족 UX
 - [ ] 작품 범위 확장 UX
-- [ ] 주변 일반 장소 추천 기준 정의
-- [ ] 검증 촬영지와 일반 추천 장소 UI 구분
-- [ ] fallback 결과에 추천 근거 표시
+- [ ] 일반 장소 추천 여부 결정
+- [ ] 일반 장소와 촬영지 UI 구분
+- [ ] 추천 근거 표시
 
 ---
 
-## 4. Actor Match Mode
-
-복수 배우 선택 시 현재 OR 방식 외에 추가적인 매칭 방식을 검토합니다.
-
-현재:
-
-```text
-공유 OR 김고은
-```
-
-→ 공유 또는 김고은과 관계된 장소 모두 후보
-
-추가 검토:
-
-- [ ] ANY Actor
-- [ ] ALL Actors
-- [ ] 특정 배우 우선순위
-- [ ] 배우별 후보 수 표시
-- [ ] 배우별 촬영지 부족 시 UX 처리
-
-예:
-
-```text
-ANY
-공유 OR 김고은
-
-ALL
-공유 AND 김고은
-```
-
-데이터가 충분하지 않은 경우 잘못된 장소를 만들어내지 않고
-후보가 부족하다는 사실을 사용자에게 명확히 보여줍니다.
-
----
-
-## 5. Data 확장 및 정제
+## 4. Data 확장 및 정제
 
 현재 도깨비 데이터를 기준으로
-FAVEWAY의 콘텐츠 / 장면 / 배우 / 장소 관계 구조를 검증했습니다.
+핵심 데이터 구조를 검증했습니다.
 
-추가 작품 데이터를 정제하는 작업은 일시 중단한 상태이며,
-다음 단계에서는 데이터 소스별 역할과 신뢰도 기준을 먼저 고정한 뒤
-여신강림 등 추가 작품으로 통합 규칙을 검증합니다.
+완료:
 
-### 현재까지 완료
+- [x] Content
+- [x] Actor
+- [x] Scene
+- [x] Place
+- [x] scene_actors
+- [x] scene_places
+- [x] Content ↔ Place 관계 검증
+- [x] 도깨비 데이터 정리
 
-- [x] 도깨비 기준 데이터 구조 검증
-- [x] Content → Scene → Actor → Place 관계 검증
-- [x] 공공데이터 촬영지 소스 확인
-- [x] 블로그 기반 촬영지 소스 확인
-- [x] 공공데이터 / 블로그 데이터 성격 비교
-- [x] 공공데이터와 파생 CSV의 중복 관계 확인
-- [x] 블로그 데이터와 가공 데이터의 중복 관계 확인
-- [x] 배우-작품 관계 데이터 확인
+다음:
 
-### 다음 데이터 작업
-
-- [ ] 데이터 소스별 신뢰도 기준 정의
-- [ ] 공공데이터 / 블로그 데이터의 역할 구분
-- [ ] Scene 정보가 없는 촬영지 저장 정책 정의
-- [ ] 동일 장소 중복 병합 기준 정의
-- [ ] 동일 작품 / 동일 장소 중복 처리 기준 고정
-- [ ] 여러 출처가 같은 장소를 가리킬 때 source 관리 방식 정의
-- [ ] Supabase Import CSV 포맷 고정
-- [ ] 여신강림 데이터 정제
-- [ ] 여신강림 공공데이터 / 블로그 장소 병합
-- [ ] 여신강림 배우 / Scene 관계 연결
-- [ ] 추가 작품 2~3개로 구조 재검증
-
-### 이후 확장
-
-- [ ] 작품 데이터 추가
-- [ ] 배우 데이터 추가
-- [ ] 촬영지 데이터 추가
-- [ ] Scene 데이터 추가
-- [ ] scene_actors 데이터 추가
-- [ ] scene_places 데이터 추가
-- [ ] verified_fact 보강
-- [ ] source_url 보강
-- [ ] verification_status 정리
-- [ ] 폐업 / 이전 장소 확인
-- [ ] is_active 관리
-- [ ] 좌표 검증
-- [ ] 중복 장소 정리
-- [ ] 장소 타입 정리
-
-핵심 관계:
-
-```text
-Content
-↓
-Scene
-↓
-Scene Actor
-↓
-Scene Place
-↓
-Place
-```
-
-데이터 소스별 역할은 다음 방향으로 검토합니다.
-
-```text
-공공데이터
-→ Scene / Episode / 장면 설명 등 근거 데이터에 강점
-
-블로그 데이터
-→ 촬영지 후보 확장에 강점
-```
-
-Scene 정보가 없는 촬영지는
-촬영지 자체의 근거가 충분한 경우 장소 데이터로 저장하되,
-장면 정보가 검증된 것처럼 임의 생성하지 않습니다.
+- [ ] 데이터 소스별 신뢰도 기준
+- [ ] Scene 없는 촬영지 저장 정책
+- [ ] 동일 장소 병합 기준
+- [ ] source 관리 기준
+- [ ] Import CSV 포맷 고정
+- [ ] 여신강림 데이터
+- [ ] 추가 작품 2~3개
 
 ---
 
-## 6. AI Recommendation
+## 5. AI Docent
 
-현재 Rule-based Course Recommendation 위에 AI 기반 개인화를 추가합니다.
-
-중요 원칙:
-
-```text
-AI
-≠
-촬영지 생성
-```
-
-AI가 새로운 촬영지를 만들어내는 것이 아니라
-DB에서 조회된 실제 후보 안에서 추천 이유와 선호도를 계산하는 구조로 사용합니다.
-
-예상 흐름:
-
-```text
-Verified DB Candidates
-↓
-사용자 취향
-+
-여행 조건
-+
-작품 / 배우 선호
-↓
-AI Ranking
-↓
-Route Algorithm
-↓
-Course
-```
-
-- [ ] 사용자 취향 입력 방식 정의
-- [ ] 여행 분위기 입력
-- [ ] 추천 입력 데이터 구조 정의
-- [ ] AI Ranking 방식 설계
-- [ ] 후보 장소 점수화
-- [ ] 추천 이유 생성
-- [ ] Rule-based 결과와 AI 결과 비교
-- [ ] AI 실패 시 Rule-based fallback
-
----
-
-## 7. AI Docent
-
-DB의 검증된 작품 / 장면 정보를 중심으로 장소별 AI 설명을 생성합니다.
-
-원칙:
+우선순위가 높은 신규 핵심 기능입니다.
 
 ```text
 DB Fact
@@ -571,99 +414,103 @@ Scene
 +
 Place
 +
+Actor
++
 User Preference
 ↓
 LLM
 ↓
-AI Docent
+Docent
 ```
 
-AI가 장소나 장면 사실을 임의로 만드는 방식은 사용하지 않습니다.
-
-- [ ] Docent API 설계
-- [ ] DB → LLM 입력 구조 정의
-- [ ] verified_fact 반영
-- [ ] Scene 정보 반영
-- [ ] Episode 정보 반영
-- [ ] 사용자 취향 반영
-- [ ] 한국어 Docent
-- [ ] 영어 Docent
+- [ ] Docent API
+- [ ] DB → LLM 입력 구조
+- [ ] verified_fact
+- [ ] Scene
+- [ ] Episode
+- [ ] 사용자 취향
+- [ ] 한국어
+- [ ] 영어
 - [ ] 한국어 TTS
 - [ ] 영어 TTS
-- [ ] 잘못된 정보 생성 방지
-- [ ] 데이터 부족 시 응답 정책
+- [ ] 정보 부족 정책
 - [ ] LLM 실패 fallback
+
+---
+
+## 6. AI Recommendation
+
+현재 Rule-based Recommendation 위에
+개인화 Ranking을 추가합니다.
+
+- [ ] 사용자 취향 입력
+- [ ] 여행 분위기
+- [ ] AI Ranking
+- [ ] Candidate 점수
+- [ ] 추천 이유
+- [ ] Candidate ID Validation
+- [ ] Rule-based fallback
+
+---
+
+## 7. Deployment
+
+- [ ] Production 환경변수
+- [ ] Supabase Production 설정
+- [ ] Kakao Production Domain
+- [ ] TMAP Production 설정
+- [ ] API Key 점검
+- [ ] Vercel 배포
+- [ ] Production API Test
+- [ ] 모바일 최종 테스트
+- [ ] 상태 UI 최종 점검
+- [ ] README 최종 업데이트
 
 ---
 
 ## 8. User Features
 
-현재 브라우저 localStorage 기반 기능을 실제 사용자 저장 기능으로 확장합니다.
+핵심 MVP 이후 확장합니다.
 
 - [ ] 회원가입
 - [ ] 로그인
 - [ ] 로그아웃
-- [ ] 사용자 Profile
+- [ ] Profile
 - [ ] 사용자 취향 저장
-- [ ] 생성한 Course 저장
-- [ ] Course 목록
-- [ ] 저장된 Course 상세
-- [ ] Course 수정사항 서버 저장
+- [ ] Course 서버 저장
+- [ ] 저장 Course 목록
+- [ ] Course 상세
 - [ ] Course 삭제
 
-이 단계에서 현재 localStorage 기반 Course Persistence를
-DB 기반 저장 방식으로 확장합니다.
-
----
-
-## 9. Deployment
-
-- [ ] Production 환경변수 정리
-- [ ] Supabase Production 설정 확인
-- [ ] Kakao Maps Production Domain 등록
-- [ ] TMAP Production 환경 설정 확인
-- [ ] API Key 서버 관리 점검
-- [ ] Vercel 배포
-- [ ] Production API 테스트
-- [ ] 모바일 반응형 최종 점검
-- [ ] Error / Empty / Loading UI 최종 점검
-- [ ] README 최종 업데이트
+현재 단계에서는 localStorage를 유지합니다.
 
 ---
 
 # 후속 최적화
 
-## 실제 도보 경로 API 추가 최적화
+## TMAP Route 최적화
 
-현재 브라우저에서는 Course 단위로 `/api/routes/walking`을 한 번만 호출하지만,
-서버에서는 인접 장소 수만큼 TMAP API 요청이 발생합니다.
-
-예:
+현재:
 
 ```text
-장소 4개
-
-브라우저
+Client
 POST /api/routes/walking 1회
 
-서버
-1 → 2 TMAP
-2 → 3 TMAP
-3 → 4 TMAP
+Server
+장소 수 - 1 만큼 TMAP 호출
 ```
 
-향후 실제 호출량 문제가 확인되면 다음 최적화를 검토합니다.
+실제 사용량 문제가 발생하면:
 
-- [ ] 동일 구간 중복 요청 방지
-- [ ] 화면 내 단기 메모리 캐시 검토
-- [ ] 순서 변경 시 변경된 구간만 재조회 검토
-- [ ] TMAP API 사용량 모니터링
-- [ ] API 호출 제한 대응
+- [ ] 동일 구간 캐시
+- [ ] 변경된 구간만 재조회
+- [ ] 단기 메모리 캐시
+- [ ] 호출량 모니터링
+- [ ] Rate Limit 대응
 
-우선순위는 낮습니다.
+을 검토합니다.
 
-현재 규모에서는 기존 구조로도 충분하므로
-실제 호출량 문제가 확인될 때 최적화합니다.
+현재 우선순위는 낮습니다.
 
 ---
 
@@ -671,16 +518,13 @@ POST /api/routes/walking 1회
 
 ## 여행 진행 모드
 
-코스를 만드는 서비스에서 실제 여행 중 사용하는 서비스로 확장합니다.
-
 - [ ] 여행 시작
-- [ ] 현재 방문 장소 표시
-- [ ] 다음 장소 안내
-- [ ] 현재 위치 기반 장소 도착 감지
-- [ ] 방문 완료 처리
+- [ ] 현재 장소
+- [ ] 다음 장소
+- [ ] 위치 기반 도착 감지
+- [ ] 방문 완료
 - [ ] 다음 장소 이동
-- [ ] 실제 이동 경로 안내
-- [ ] 현장 AI Docent 재생
+- [ ] 현장 AI Docent
 
 예상 상태:
 
@@ -694,157 +538,25 @@ COMPLETED
 
 ---
 
-## 개인화
-
-- [ ] 선호 작품 저장
-- [ ] 선호 배우 저장
-- [ ] 방문 장소 이력
-- [ ] 저장한 Course 분석
-- [ ] 추천 피드백
-- [ ] 사용자 행동 기반 추천 보정
-- [ ] 개인화 Course Ranking
-
----
-
 # 현재 개발 우선순위
 
 ```text
-1. 촬영지 상세 정보 고도화
-   ↓
-2. Loading / Empty / Error / Retry 상태 정리
-   ↓
-3. 데이터 부족 시 Fallback 정책
-   ↓
-4. Actor Match Mode
-   ↓
-5. Data 확장 및 정제
-   ↓
+1. Planning 상태 처리 마무리
+↓
+2. 촬영지 상세 UX 보완
+↓
+3. 데이터 부족 Fallback 정책
+↓
+4. Data 확장 및 정제
+↓
+5. AI Docent
+↓
 6. AI Recommendation
-   ↓
-7. AI Docent
-   ↓
+↓
+7. Deployment
+↓
 8. User Features
-   ↓
-9. Deployment
 ```
-
-실제 도보 경로 API 추가 최적화는
-현재 호출량에서 문제가 없다면 후속 최적화로 유지합니다.
-
----
-
-# 현재 핵심 사용자 흐름
-
-```text
-HOME
-↓
-코스 만들기 / 촬영지 둘러보기
-↓
-작품 / 배우 탐색
-↓
-작품 / 배우 선택
-↓
-촬영지 조회
-↓
-목록 + 지도 확인
-↓
-여행 조건 입력
-↓
-DB 촬영지 후보 조회
-↓
-Actor → Scene → Place 검증
-↓
-Course 생성
-↓
-실제 TMAP 도보 경로 조회
-↓
-Kakao Map에 실제 경로 표시
-↓
-Course 확인
-↓
-장소 추가 / 삭제 / 순서 변경
-↓
-실제 경로 재계산
-↓
-Course 상태 localStorage 유지
-```
-
----
-
-# 현재 핵심 Frontend 상태 흐름
-
-Course의 장소 목록을 핵심 기준 상태로 사용합니다.
-
-```text
-Course Places
-↓
-장소 순서
-↓
-TMAP 보행 경로
-↓
-Kakao Map Marker / Polyline
-↓
-총 거리
-↓
-총 이동 시간
-↓
-Course Summary
-```
-
-사용자가 직접 변경하는 대상:
-
-- 장소 추가
-- 장소 삭제
-- 장소 순서 변경
-
-파생 데이터는 Course Places가 변경될 때 다시 계산하거나 갱신합니다.
-
-이를 통해 각각의 UI가 독립적으로 다른 값을 가지지 않도록 구성합니다.
-
----
-
-# 외부 서비스 역할
-
-## Supabase
-
-역할:
-
-- 콘텐츠 데이터
-- 배우 데이터
-- 촬영지 데이터
-- 장면 및 관계 데이터
-
-핵심 역할: **서비스의 기준 데이터 저장**
-
-## Kakao Map
-
-역할:
-
-- 장소 위치 시각화
-- Marker 표시
-- Course 경로 시각화
-
-핵심 역할: **지도 UI**
-
-## TMAP
-
-역할:
-
-- 실제 보행자 경로 계산
-- 실제 이동 거리 계산
-- 예상 도보 시간 계산
-
-핵심 역할: **경로 계산**
-
-## AI
-
-예정 역할:
-
-- DB에서 확인된 장소 및 작품 정보를 기반으로 사용자 맞춤 추천 이유 생성
-- 검증된 장소 후보 안에서 개인화 Ranking
-- 사용자 취향을 반영한 AI Docent 설명 생성
-
-AI가 촬영지 자체를 생성하는 역할은 맡지 않습니다.
 
 ---
 
@@ -852,7 +564,7 @@ AI가 촬영지 자체를 생성하는 역할은 맡지 않습니다.
 
 ## 1. 촬영지는 AI가 생성하지 않는다
 
-촬영지는 반드시 DB에 존재하는 실제 데이터를 사용합니다.
+DB에 존재하는 실제 장소만 사용합니다.
 
 ## 2. 배우와 촬영지는 Scene을 통해 연결한다
 
@@ -862,29 +574,12 @@ Actor
 → Place
 ```
 
-배우가 작품에 출연했다는 이유만으로 해당 작품의 모든 촬영지를
-배우 관련 장소로 취급하지 않습니다.
-
 ## 3. 검증된 정보를 추천 근거로 사용한다
 
-장소, 작품, 장면, 배우 관계의 근거가 사용자에게 보이도록 합니다.
+## 4. AI는 설명과 개인화에 사용한다
 
-## 4. AI는 DB 데이터를 확장 설명하고 순위를 개인화한다
+## 5. TMAP 실패가 Course 전체 실패가 되지 않게 한다
 
-AI가 사실 데이터를 대신하는 구조가 아니라
-검증된 데이터를 기반으로 추천과 설명을 개선하는 방향으로 사용합니다.
+## 6. 저장 상태와 재계산 상태를 구분한다
 
-## 5. Route API 실패가 서비스 전체 실패로 이어지지 않게 한다
-
-TMAP 실제 보행자 경로 조회가 실패할 경우
-기존 Haversine 거리 및 예상 도보 시간 계산을 fallback으로 사용합니다.
-
-## 6. 저장할 상태와 재계산할 상태를 구분한다
-
-사용자가 직접 변경한 Course 상태는 저장하지만,
-TMAP에서 다시 얻을 수 있는 경로 데이터는 필요할 때 재조회합니다.
-
-## 7. 데이터가 부족하면 부족한 상태를 그대로 보여준다
-
-Scene이나 촬영지 정보가 부족한 경우
-AI나 애플리케이션에서 임의의 사실을 생성해 채우지 않습니다.
+## 7. 데이터가 없으면 없는 상태를 그대로 보여준다
