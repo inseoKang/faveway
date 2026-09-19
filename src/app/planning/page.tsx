@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import PageHeader from "@/components/common/PageHeader";
+import StateFeedback from "@/components/common/StateFeedback";
 
 const durations = [
   {
@@ -50,6 +51,26 @@ type PlanningInput = {
   maxWalkingMinutes: number | null;
 };
 
+type TripErrorCode =
+  | "INVALID_TRIP_CONDITIONS"
+  | "TRIP_CANDIDATES_FETCH_FAILED"
+  | "NO_FILMING_LOCATIONS"
+  | "NO_COORDINATED_FILMING_LOCATIONS"
+  | "NO_AVAILABLE_ROUTE"
+  | "TRIP_CREATION_FAILED";
+
+type TripApiResponse = {
+  data?: unknown;
+  code?: TripErrorCode;
+  message?: string;
+};
+
+type SubmitFeedback = {
+  type: "empty" | "error";
+  title: string;
+  description: string;
+};
+
 function parseIds(value: string | null): number[] {
   if (!value) {
     return [];
@@ -62,6 +83,14 @@ function parseIds(value: string | null): number[] {
         .map((item) => Number(item.trim()))
         .filter((id) => Number.isInteger(id) && id > 0),
     ),
+  );
+}
+
+function isEmptyTripResult(code?: TripErrorCode) {
+  return (
+    code === "NO_FILMING_LOCATIONS" ||
+    code === "NO_COORDINATED_FILMING_LOCATIONS" ||
+    code === "NO_AVAILABLE_ROUTE"
   );
 }
 
@@ -97,19 +126,47 @@ function PlanningContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [error, setError] = useState("");
+  const [submitFeedback, setSubmitFeedback] =
+    useState<SubmitFeedback | null>(null);
+
+  function clearSubmitFeedback() {
+    if (submitFeedback) {
+      setSubmitFeedback(null);
+    }
+  }
+
+  function selectDuration(value: number) {
+    clearSubmitFeedback();
+    setDurationMinutes(value);
+  }
+
+  function selectWalkingMinutes(value: number | null) {
+    clearSubmitFeedback();
+    setMaxWalkingMinutes(value);
+  }
 
   async function handleCreateCourse() {
     /**
+     * 함수 레벨에서도 중복 요청을 방어한다.
+     *
+     * 버튼 disabled만으로도 대부분 막을 수 있지만
+     * 빠른 이벤트나 다른 호출 경로가 생길 경우를 대비한다.
+     */
+    if (isSubmitting) {
+      return;
+    }
+
+    /**
      * contentIds가 하나 이상 있어야 함
      * durationMinutes가 선택되어 있어야 함
-     * maxWalkingMinutes는
+     *
+     * maxWalkingMinutes
      * - undefined: 미선택
      * - null: 제한 없음
      */
     if (
       contentIds.length === 0 ||
-      !durationMinutes ||
+      durationMinutes === null ||
       maxWalkingMinutes === undefined
     ) {
       return;
@@ -124,22 +181,56 @@ function PlanningContent() {
 
     try {
       setIsSubmitting(true);
-      setError("");
+      setSubmitFeedback(null);
 
       const response = await fetch("/api/trips", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify(planningInput),
       });
 
-      const result = await response.json();
+      let result: TripApiResponse | null = null;
+
+      try {
+        result = (await response.json()) as TripApiResponse;
+      } catch {
+        result = null;
+      }
 
       if (!response.ok) {
-        throw new Error(result.message ?? "코스를 생성하지 못했습니다.");
+        const message =
+          result?.message ?? "코스를 생성하지 못했습니다. 다시 시도해 주세요.";
+
+        if (isEmptyTripResult(result?.code)) {
+          setSubmitFeedback({
+            type: "empty",
+            title: "현재 조건에 맞는 코스를 찾지 못했어요.",
+            description: message,
+          });
+
+          return;
+        }
+
+        setSubmitFeedback({
+          type: "error",
+          title: "코스를 생성하지 못했어요.",
+          description: message,
+        });
+
+        return;
+      }
+
+      if (!result?.data) {
+        setSubmitFeedback({
+          type: "error",
+          title: "코스 정보를 확인하지 못했어요.",
+          description:
+            "코스 생성 결과가 올바르지 않습니다. 잠시 후 다시 시도해 주세요.",
+        });
+
+        return;
       }
 
       const courseData = encodeURIComponent(JSON.stringify(result.data));
@@ -154,12 +245,13 @@ function PlanningContent() {
       }
 
       router.push(`/course?${params.toString()}`);
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "알 수 없는 오류가 발생했습니다.",
-      );
+    } catch {
+      setSubmitFeedback({
+        type: "error",
+        title: "코스 생성 요청에 실패했어요.",
+        description:
+          "네트워크 상태를 확인한 뒤 다시 시도해 주세요. 선택한 여행 조건은 그대로 유지됩니다.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -167,20 +259,18 @@ function PlanningContent() {
 
   /**
    * 작품 정보 자체가 없다면
-   * planning 페이지에 잘못 진입한 상태
+   * Planning 페이지에 잘못 진입한 상태다.
    */
   if (contentIds.length === 0) {
     return (
       <main className="fw-page">
-        <p className="fw-state fw-error">선택된 작품 정보가 없습니다.</p>
-
-        <button
-          type="button"
-          onClick={() => router.push("/plan")}
-          className="fw-secondary-button mt-4"
-        >
-          ← 다시 선택하기
-        </button>
+        <StateFeedback
+          tone="error"
+          title="선택된 작품 정보가 없어요."
+          description="코스를 만들 작품을 다시 선택해 주세요."
+          actionLabel="다시 선택하기"
+          onAction={() => router.push("/plan")}
+        />
       </main>
     );
   }
@@ -254,7 +344,7 @@ function PlanningContent() {
               <button
                 key={duration.value}
                 type="button"
-                onClick={() => setDurationMinutes(duration.value)}
+                onClick={() => selectDuration(duration.value)}
                 aria-pressed={selected}
                 disabled={isSubmitting}
                 className={`fw-duration rounded-2xl border px-4 py-4 text-sm font-medium transition ${
@@ -285,7 +375,7 @@ function PlanningContent() {
               <button
                 key={option.label}
                 type="button"
-                onClick={() => setMaxWalkingMinutes(option.value)}
+                onClick={() => selectWalkingMinutes(option.value)}
                 aria-pressed={selected}
                 disabled={isSubmitting}
                 className={`fw-choice w-full rounded-2xl border p-4 text-left transition ${
@@ -309,10 +399,23 @@ function PlanningContent() {
         </div>
       </section>
 
-      {error && (
-        <p className="fw-state fw-error mt-6" role="alert">
-          {error}
-        </p>
+      {submitFeedback?.type === "empty" && (
+        <StateFeedback
+          title={submitFeedback.title}
+          description={`${submitFeedback.description} 여행 시간이나 도보 조건을 바꿔 다시 만들어 보세요.`}
+          className="mt-6"
+        />
+      )}
+
+      {submitFeedback?.type === "error" && (
+        <StateFeedback
+          tone="error"
+          title={submitFeedback.title}
+          description={submitFeedback.description}
+          actionLabel="다시 시도"
+          onAction={() => void handleCreateCourse()}
+          className="mt-6"
+        />
       )}
 
       <div className="fw-action-bar">
@@ -326,10 +429,11 @@ function PlanningContent() {
               ? " · 도보 제한 없음"
               : ` · 한 구간 ${maxWalkingMinutes}분 이내`}
         </p>
+
         <button
           type="button"
           disabled={!canCreateCourse}
-          onClick={handleCreateCourse}
+          onClick={() => void handleCreateCourse()}
           className="fw-primary-button"
           aria-busy={isSubmitting}
         >
@@ -345,9 +449,10 @@ export default function PlanningPage() {
     <Suspense
       fallback={
         <main className="fw-page">
-          <p className="fw-state" role="status">
-            여행 정보를 불러오는 중...
-          </p>
+          <StateFeedback
+            title="여행 정보를 불러오고 있어요."
+            description="선택한 작품과 배우 정보를 확인하고 있습니다."
+          />
         </main>
       }
     >
