@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import styles from "./course.module.css";
 
 import BackButton from "@/components/common/BackButton";
+import InlineWarning from "@/components/common/InlineWarning";
+import StateFeedback from "@/components/common/StateFeedback";
 import CourseMap from "@/components/map/CourseMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 
@@ -119,9 +121,92 @@ type WalkingRouteApiResponse = {
   message?: string;
 };
 
-type WalkingRouteStatus = "idle" | "loading" | "real" | "partial" | "fallback";
+type WalkingRouteStatus =
+  | "idle"
+  | "loading"
+  | "real"
+  | "partial"
+  | "fallback";
 
 const COURSE_STORAGE_PREFIX = "faveway:course";
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isIntegerArray(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) => typeof item === "number" && Number.isInteger(item),
+    )
+  );
+}
+
+function isValidCourseStop(value: unknown): value is CourseStop {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const stop = value as Partial<CourseStop>;
+
+  if (
+    !Number.isInteger(stop.contentId) ||
+    typeof stop.contentTitle !== "string" ||
+    !Number.isInteger(stop.placeId) ||
+    !isFiniteNumber(stop.order) ||
+    !isFiniteNumber(stop.stayMinutes) ||
+    !isFiniteNumber(stop.distanceFromPreviousKm) ||
+    !isFiniteNumber(stop.walkingMinutesFromPrevious) ||
+    typeof stop.relationType !== "string" ||
+    typeof stop.verificationStatus !== "string" ||
+    !(
+      stop.verifiedFact === null ||
+      typeof stop.verifiedFact === "string"
+    ) ||
+    !stop.place ||
+    typeof stop.place !== "object"
+  ) {
+    return false;
+  }
+
+  const place = stop.place as Partial<Place>;
+
+  return (
+    Number.isInteger(place.id) &&
+    typeof place.name === "string" &&
+    (place.address === null || typeof place.address === "string") &&
+    (place.place_type === null || typeof place.place_type === "string") &&
+    typeof place.is_active === "boolean" &&
+    (place.latitude === null || isFiniteNumber(place.latitude)) &&
+    (place.longitude === null || isFiniteNumber(place.longitude))
+  );
+}
+
+function isValidCourseData(value: unknown): value is CourseData {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const course = value as Partial<CourseData>;
+
+  return (
+    isIntegerArray(course.contentIds) &&
+    isIntegerArray(course.actorIds) &&
+    isFiniteNumber(course.durationMinutes) &&
+    course.durationMinutes > 0 &&
+    (course.maxWalkingMinutes === null ||
+      (isFiniteNumber(course.maxWalkingMinutes) &&
+        course.maxWalkingMinutes > 0)) &&
+    isFiniteNumber(course.totalDistanceKm) &&
+    course.totalDistanceKm >= 0 &&
+    isFiniteNumber(course.totalWalkingMinutes) &&
+    course.totalWalkingMinutes >= 0 &&
+    Array.isArray(course.stops) &&
+    course.stops.length > 0 &&
+    course.stops.every(isValidCourseStop)
+  );
+}
 
 function createCourseStorageKey(course: CourseData) {
   const contentKey = [...course.contentIds].sort((a, b) => a - b).join(",");
@@ -265,7 +350,6 @@ function CourseContent() {
   const searchParams = useSearchParams();
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
-
   const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
 
   const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
@@ -281,22 +365,44 @@ function CourseContent() {
   const [walkingRouteStatus, setWalkingRouteStatus] =
     useState<WalkingRouteStatus>("idle");
 
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
+
   const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const rawData = searchParams.get("data");
   const title = searchParams.get("title");
 
-  const initialCourse = useMemo(() => {
+  const initialCourseResult = useMemo(() => {
     if (!rawData) {
-      return null;
+      return {
+        status: "missing" as const,
+        course: null,
+      };
     }
 
     try {
-      return JSON.parse(decodeURIComponent(rawData)) as CourseData;
+      const parsed = JSON.parse(decodeURIComponent(rawData)) as unknown;
+
+      if (!isValidCourseData(parsed)) {
+        return {
+          status: "invalid" as const,
+          course: null,
+        };
+      }
+
+      return {
+        status: "ready" as const,
+        course: parsed,
+      };
     } catch {
-      return null;
+      return {
+        status: "invalid" as const,
+        course: null,
+      };
     }
   }, [rawData]);
+
+  const initialCourse = initialCourseResult.course;
 
   const storageKey = useMemo(() => {
     if (!initialCourse) {
@@ -340,17 +446,36 @@ function CourseContent() {
 
         if (
           !Array.isArray(parsedCourse.stops) ||
-          parsedCourse.stops.length === 0
+          parsedCourse.stops.length === 0 ||
+          !parsedCourse.stops.every(isValidCourseStop)
         ) {
-          window.localStorage.removeItem(storageKey);
+          try {
+            window.localStorage.removeItem(storageKey);
+          } catch {
+            // 저장소 접근 실패는 warning으로만 안내한다.
+          }
+
+          setStorageWarning(
+            "저장된 수정 내용을 복원하지 못해 처음 생성된 코스를 사용하고 있어요.",
+          );
+
           return;
         }
 
         setCourse(
           rebuildCourse(initialCourse, parsedCourse.stops as CourseStop[]),
         );
+        setStorageWarning(null);
       } catch {
-        window.localStorage.removeItem(storageKey);
+        try {
+          window.localStorage.removeItem(storageKey);
+        } catch {
+          // 저장소 자체에 접근하지 못해도 Course 사용은 유지한다.
+        }
+
+        setStorageWarning(
+          "저장된 수정 내용을 복원하지 못해 처음 생성된 코스를 사용하고 있어요.",
+        );
       }
     }, 0);
 
@@ -602,6 +727,79 @@ function CourseContent() {
 
         setWalkingRouteSegments(fallbackSegments);
         setWalkingRouteStatus("fallback");
+
+        setCourse((currentCourse) => {
+          if (!currentCourse) {
+            return currentCourse;
+          }
+
+          const currentRouteKey = JSON.stringify(
+            currentCourse.stops.map((stop) => ({
+              placeId: stop.placeId,
+              name: stop.place.name,
+              latitude: stop.place.latitude,
+              longitude: stop.place.longitude,
+            })),
+          );
+
+          if (currentRouteKey !== walkingRouteKey) {
+            return currentCourse;
+          }
+
+          const recalculatedStops = currentCourse.stops.map((stop, index) => {
+            if (index === 0) {
+              return {
+                ...stop,
+                order: 1,
+                distanceFromPreviousKm: 0,
+                walkingMinutesFromPrevious: 0,
+              };
+            }
+
+            const segment = fallbackSegments[index - 1];
+
+            return {
+              ...stop,
+              order: index + 1,
+              distanceFromPreviousKm: Number(
+                (segment.distanceMeters / 1000).toFixed(2),
+              ),
+              walkingMinutesFromPrevious: Math.ceil(
+                segment.durationSeconds / 60,
+              ),
+            };
+          });
+
+          const totalWalkingMinutes = recalculatedStops.reduce(
+            (sum, stop) => sum + stop.walkingMinutesFromPrevious,
+            0,
+          );
+
+          const totalDistanceKm = recalculatedStops.reduce(
+            (sum, stop) => sum + stop.distanceFromPreviousKm,
+            0,
+          );
+
+          const availableStayMinutes = Math.max(
+            currentCourse.durationMinutes - totalWalkingMinutes,
+            0,
+          );
+
+          const stayMinutes =
+            recalculatedStops.length > 0
+              ? Math.floor(availableStayMinutes / recalculatedStops.length)
+              : 0;
+
+          return {
+            ...currentCourse,
+            totalDistanceKm: Number(totalDistanceKm.toFixed(2)),
+            totalWalkingMinutes,
+            stops: recalculatedStops.map((stop) => ({
+              ...stop,
+              stayMinutes,
+            })),
+          };
+        });
       });
 
     return () => {
@@ -652,7 +850,14 @@ function CourseContent() {
       return;
     }
 
-    window.localStorage.setItem(storageKey, JSON.stringify(nextCourse));
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(nextCourse));
+      setStorageWarning(null);
+    } catch {
+      setStorageWarning(
+        "변경 내용을 브라우저에 저장하지 못했어요. 현재 화면에서는 계속 사용할 수 있지만 새로고침하면 수정 내용이 사라질 수 있어요.",
+      );
+    }
   }
 
   function selectCourseStop(placeId: number) {
@@ -673,7 +878,6 @@ function CourseContent() {
 
     if (course.stops.length <= 1) {
       window.alert("코스에는 최소 한 개의 장소가 필요합니다.");
-
       return;
     }
 
@@ -692,7 +896,6 @@ function CourseContent() {
     }
 
     const nextStops = course.stops.filter((stop) => stop.placeId !== placeId);
-
     const nextCourse = rebuildCourse(course, nextStops);
 
     persistCourse(nextCourse);
@@ -761,7 +964,15 @@ function CourseContent() {
       return;
     }
 
-    window.localStorage.removeItem(storageKey);
+    try {
+      window.localStorage.removeItem(storageKey);
+      setStorageWarning(null);
+    } catch {
+      setStorageWarning(
+        "브라우저에 저장된 수정 내용을 삭제하지 못했어요. 현재 화면은 초기 코스로 되돌렸지만 새로고침하면 저장된 내용이 다시 나타날 수 있어요.",
+      );
+    }
+
     setCourse(initialCourse);
     setSelectedPlaceId(null);
     setDetailTarget(null);
@@ -901,6 +1112,7 @@ function CourseContent() {
     persistCourse(nextCourse);
     setCourse(nextCourse);
     setSelectedPlaceId(candidate.place.id);
+
     setAddPlaceCandidates(
       (current) =>
         current?.filter((item) => item.place.id !== candidate.place.id) ?? null,
@@ -914,16 +1126,32 @@ function CourseContent() {
     }, 0);
   }
 
-  if (!rawData) {
+  if (initialCourseResult.status === "missing") {
     return (
       <main className={styles.page}>
         <div className={styles.shell}>
           <BackButton className={styles.back} />
-          <section className={styles.empty}>
-            <p className={styles.eyebrow}>FAVEWAY</p>
-            <h1>코스 정보가 없어요</h1>
-            <p>이전 화면에서 작품과 여행 조건을 선택해 주세요.</p>
-          </section>
+
+          <StateFeedback
+            title="코스 정보가 없어요."
+            description="이전 화면에서 작품과 여행 조건을 선택해 코스를 만들어 주세요."
+          />
+        </div>
+      </main>
+    );
+  }
+
+  if (initialCourseResult.status === "invalid") {
+    return (
+      <main className={styles.page}>
+        <div className={styles.shell}>
+          <BackButton className={styles.back} />
+
+          <StateFeedback
+            tone="error"
+            title="코스 정보를 확인할 수 없어요."
+            description="전달된 코스 정보가 올바르지 않습니다. 이전 화면에서 코스를 다시 만들어 주세요."
+          />
         </div>
       </main>
     );
@@ -934,11 +1162,12 @@ function CourseContent() {
       <main className={styles.page}>
         <div className={styles.shell}>
           <BackButton className={styles.back} />
-          <section className={styles.empty}>
-            <p className={styles.eyebrow}>FAVEWAY</p>
-            <h1>코스 정보를 불러오지 못했어요</h1>
-            <p>이전 화면에서 작품과 여행 조건을 다시 선택해 주세요.</p>
-          </section>
+
+          <StateFeedback
+            tone="error"
+            title="코스를 불러오지 못했어요."
+            description="이전 화면에서 코스를 다시 만들어 주세요."
+          />
         </div>
       </main>
     );
@@ -948,21 +1177,24 @@ function CourseContent() {
     (sum, stop) => sum + stop.stayMinutes,
     0,
   );
+
   const totalMinutes = course.totalWalkingMinutes + totalStayMinutes;
-  const routeStatusText = {
-    idle: "장소가 2곳 이상이면 도보 경로를 안내해요.",
-    loading: "실제 도보 경로를 확인하고 있어요. 현재 수치는 임시 예상치예요.",
-    real: "실제 도보 경로 기준 · 소요 시간은 예상치예요.",
-    partial:
-      "일부 구간은 직선거리 기반 예상치예요. 실제 거리·시간과 다를 수 있어요.",
-    fallback: "직선거리 기반 예상치예요. 실제 도보 거리·시간과 다를 수 있어요.",
-  }[walkingRouteStatus];
+
+  const routeStatusText =
+    walkingRouteStatus === "idle"
+      ? "장소가 2곳 이상이면 도보 경로를 안내해요."
+      : walkingRouteStatus === "loading"
+        ? "실제 도보 경로를 확인하고 있어요. 현재 수치는 임시 예상치예요."
+        : walkingRouteStatus === "real"
+          ? "실제 도보 경로 기준 · 소요 시간은 예상치예요."
+          : null;
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
         <nav className={styles.nav} aria-label="코스 탐색">
           <BackButton className={styles.back} />
+
           <span className={styles.wordmark}>
             FAVEWAY<span aria-hidden="true">.</span>
           </span>
@@ -980,15 +1212,18 @@ function CourseContent() {
           <div className={styles.summaryTop}>
             <div>
               <p className={styles.caption}>이동과 체류를 포함한 예상 시간</p>
+
               <p className={styles.total}>
                 <strong>{totalMinutes}</strong>
                 <span>분</span>
               </p>
             </div>
+
             <span className={styles.locationCount}>
               촬영지 {course.stops.length}곳
             </span>
           </div>
+
           <dl className={styles.metrics}>
             <div>
               <dt>도보 시간</dt>
@@ -997,6 +1232,7 @@ function CourseContent() {
                 <span>분</span>
               </dd>
             </div>
+
             <div>
               <dt>이동 거리</dt>
               <dd>
@@ -1004,6 +1240,7 @@ function CourseContent() {
                 <span>km</span>
               </dd>
             </div>
+
             <div>
               <dt>체류 시간</dt>
               <dd>
@@ -1012,8 +1249,10 @@ function CourseContent() {
               </dd>
             </div>
           </dl>
+
           <div className={styles.conditions}>
             <span>여행 가능 {course.durationMinutes}분</span>
+
             <span>
               한 구간 도보{" "}
               {course.maxWalkingMinutes === null
@@ -1023,22 +1262,39 @@ function CourseContent() {
           </div>
         </section>
 
-        <p
-          className={styles.routeStatus}
-          role="status"
-          data-warning={
-            walkingRouteStatus === "partial" ||
-            walkingRouteStatus === "fallback"
-          }
-        >
-          <span className={styles.statusDot} aria-hidden="true" />
-          {routeStatusText}
-        </p>
+        {storageWarning && (
+          <InlineWarning
+            title="코스 저장 상태를 확인해 주세요."
+            description={storageWarning}
+          />
+        )}
+
+        {routeStatusText && (
+          <p className={styles.routeStatus} role="status">
+            <span className={styles.statusDot} aria-hidden="true" />
+            {routeStatusText}
+          </p>
+        )}
+
+        {walkingRouteStatus === "partial" && (
+          <InlineWarning
+            title="일부 구간은 예상 경로를 사용하고 있어요."
+            description="실제 도보 경로를 불러오지 못한 구간만 직선거리 기반 예상치로 계산했어요. 코스는 계속 이용할 수 있습니다."
+          />
+        )}
+
+        {walkingRouteStatus === "fallback" && (
+          <InlineWarning
+            title="현재 예상 경로를 사용하고 있어요."
+            description="실제 도보 경로를 불러오지 못해 직선거리 기반 예상치로 안내하고 있어요. 실제 거리와 시간은 다를 수 있습니다."
+          />
+        )}
 
         {!validation.isValid && (
           <section className={styles.warning} aria-label="여행 조건 초과 안내">
             <h2>여행 조건을 조금 벗어났어요</h2>
             <p>방문 순서를 바꾸거나 장소를 줄여보세요.</p>
+
             {validation.walkingViolations.map((violation) => (
               <div
                 key={`${violation.fromOrder}-${violation.toOrder}-${violation.toPlaceName}`}
@@ -1048,6 +1304,7 @@ function CourseContent() {
                   {violation.fromOrder} → {violation.toOrder} ·{" "}
                   {violation.fromPlaceName} → {violation.toPlaceName}
                 </strong>
+
                 <p>
                   예상 도보 {violation.walkingMinutes}분 · 구간 제한{" "}
                   {violation.maxWalkingMinutes}분보다{" "}
@@ -1056,11 +1313,13 @@ function CourseContent() {
                 </p>
               </div>
             ))}
+
             {validation.exceedsDuration && (
               <div className={styles.warningDetail}>
                 <strong>
                   여행 가능 시간 {validation.durationOverMinutes}분 초과
                 </strong>
+
                 <p>
                   이동에만 약 {course.totalWalkingMinutes}분이 필요해요. 여행
                   가능 시간은 {course.durationMinutes}분이에요.
@@ -1078,6 +1337,7 @@ function CourseContent() {
             <h2 id="course-map-title">한눈에 보는 코스</h2>
             <span className={styles.caption}>번호는 방문 순서예요</span>
           </div>
+
           {mapStops.length > 0 ? (
             <>
               <CourseMap
@@ -1086,16 +1346,19 @@ function CourseContent() {
                 selectedPlaceId={selectedPlaceId}
                 onSelectPlace={selectCourseStop}
               />
+
               <div className={styles.mapLegend}>
                 <span>
                   <i aria-hidden="true" />
                   도보 경로
                 </span>
+
                 <span>
                   <i className={styles.estimatedLine} aria-hidden="true" />
                   직선거리 예상 구간
                 </span>
               </div>
+
               <div className={styles.stopChips} aria-label="방문 장소 바로가기">
                 {course.stops.map((stop) => (
                   <button
@@ -1112,12 +1375,10 @@ function CourseContent() {
               </div>
             </>
           ) : (
-            <div className={styles.empty}>
-              <p>
-                지도에 표시할 촬영지 좌표가 없어요. 아래 목록에서 장소 정보를
-                확인해 주세요.
-              </p>
-            </div>
+            <StateFeedback
+              title="지도에 표시할 촬영지 좌표가 없어요."
+              description="아래 방문 목록에서 장소 정보를 계속 확인할 수 있습니다."
+            />
           )}
         </section>
 
@@ -1127,22 +1388,28 @@ function CourseContent() {
         >
           <div className={styles.sectionHeading}>
             <h2 id="course-stops-title">이 순서로 만나보세요</h2>
+
             <span className={styles.caption}>
               {course.stops.length}곳의 장면
             </span>
           </div>
+
           <p className={styles.sectionDescription}>
             장소를 눌러 장면을 살펴보고, 나만의 순서로 바꿔보세요.
           </p>
+
           {course.stops.map((stop, index) => {
             const nextStop = course.stops[index + 1];
+
             const selected = selectedPlaceId === stop.placeId;
             const isFirst = index === 0;
             const isLast = index === course.stops.length - 1;
+
             const nextStopExceedsWalkingLimit =
               nextStop != null &&
               course.maxWalkingMinutes !== null &&
               nextStop.walkingMinutesFromPrevious > course.maxWalkingMinutes;
+
             const nextSegment = nextStop
               ? walkingRouteSegments.find(
                   (segment) =>
@@ -1150,6 +1417,7 @@ function CourseContent() {
                     segment.toPlaceId === nextStop.placeId,
                 )
               : undefined;
+
             return (
               <div
                 key={`${stop.contentId}-${stop.placeId}`}
@@ -1166,6 +1434,7 @@ function CourseContent() {
                     aria-haspopup="dialog"
                     onClick={() => {
                       setSelectedPlaceId(stop.placeId);
+
                       setDetailTarget({
                         contentId: stop.contentId,
                         place: stop.place,
@@ -1174,35 +1443,43 @@ function CourseContent() {
                   >
                     <div className={styles.stopTop}>
                       <span className={styles.stopNumber}>{stop.order}</span>
+
                       <div className={styles.stopTitle}>
                         <span className={styles.contentBadge}>
                           {stop.contentTitle}
                         </span>
+
                         <h3>{stop.place.name}</h3>
                       </div>
+
                       <span className={styles.stay}>
                         체류<strong>{stop.stayMinutes}분</strong>
                       </span>
                     </div>
+
                     {stop.place.address && (
                       <p className={styles.address}>{stop.place.address}</p>
                     )}
+
                     {(stop.place.latitude == null ||
                       stop.place.longitude == null ||
                       !Number.isFinite(stop.place.latitude) ||
                       !Number.isFinite(stop.place.longitude)) && (
                       <p className={styles.caption}>지도 위치 미등록</p>
                     )}
+
                     {stop.verifiedFact && (
                       <div className={styles.scene}>
                         <span>이 장소의 이야기</span>
                         <p>{stop.verifiedFact}</p>
                       </div>
                     )}
+
                     <span className={styles.detailLink}>
                       장면과 장소 살펴보기 <span aria-hidden="true">↗</span>
                     </span>
                   </button>
+
                   <div className={styles.editControls}>
                     <div>
                       <button
@@ -1213,6 +1490,7 @@ function CourseContent() {
                       >
                         ↑ 위로
                       </button>
+
                       <button
                         type="button"
                         onClick={() => moveCourseStop(stop.placeId, "DOWN")}
@@ -1222,6 +1500,7 @@ function CourseContent() {
                         ↓ 아래로
                       </button>
                     </div>
+
                     <button
                       type="button"
                       className={styles.deleteButton}
@@ -1233,18 +1512,22 @@ function CourseContent() {
                     </button>
                   </div>
                 </article>
+
                 {nextStop && (
                   <div
                     className={styles.connector}
                     data-warning={nextStopExceedsWalkingLimit}
                   >
                     <p>
-                      {stop.order} → {nextStop.order} <span>다음 장면까지</span>
+                      {stop.order} → {nextStop.order}{" "}
+                      <span>다음 장면까지</span>
                     </p>
+
                     <strong>
                       도보 약 {nextStop.walkingMinutesFromPrevious}분{" "}
                       <span>· {nextStop.distanceFromPreviousKm}km</span>
                     </strong>
+
                     <p className={styles.caption}>
                       {walkingRouteStatus === "loading"
                         ? "경로 확인 중 · 임시 예상치"
@@ -1252,6 +1535,7 @@ function CourseContent() {
                           ? "실제 도보 경로 기준"
                           : "직선거리 기반 예상치"}
                     </p>
+
                     {nextStopExceedsWalkingLimit && (
                       <p className={styles.segmentWarning}>
                         한 구간 최대 도보 {course.maxWalkingMinutes}분을
@@ -1272,9 +1556,11 @@ function CourseContent() {
           <div className={styles.sectionHeading}>
             <h2 id="add-place-title">다음 장면을 더해볼까요?</h2>
           </div>
+
           <p className={styles.sectionDescription}>
             선택한 작품과 배우에 연결된 촬영지를 코스 마지막에 추가해요.
           </p>
+
           <button
             type="button"
             className={styles.primaryButton}
@@ -1285,11 +1571,13 @@ function CourseContent() {
                 setIsAddPlaceOpen(false);
                 return;
               }
+
               void loadAddPlaceCandidates();
             }}
           >
             {isAddPlaceOpen ? "추가 목록 닫기" : "+ 촬영지 추가하기"}
           </button>
+
           {isAddPlaceOpen && (
             <div
               id="course-place-candidates"
@@ -1297,31 +1585,34 @@ function CourseContent() {
               aria-busy={isLoadingCandidates}
             >
               {isLoadingCandidates && (
-                <p className={styles.empty} role="status">
-                  추가 가능한 촬영지를 찾고 있어요…
-                </p>
+                <StateFeedback
+                  title="추가 가능한 촬영지를 찾고 있어요."
+                  description="선택한 작품과 배우에 연결된 장소를 확인하고 있습니다."
+                />
               )}
+
               {candidateError && (
-                <div className={styles.error} role="alert">
-                  <p>{candidateError}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddPlaceCandidates(null);
-                      void loadAddPlaceCandidates();
-                    }}
-                  >
-                    다시 시도
-                  </button>
-                </div>
+                <StateFeedback
+                  tone="error"
+                  title="촬영지를 불러오지 못했어요."
+                  description={candidateError}
+                  actionLabel="다시 시도"
+                  onAction={() => {
+                    setAddPlaceCandidates(null);
+                    void loadAddPlaceCandidates();
+                  }}
+                />
               )}
+
               {!isLoadingCandidates &&
                 !candidateError &&
                 addPlaceCandidates?.length === 0 && (
-                  <p className={styles.empty}>
-                    현재 조건에서 더 추가할 수 있는 촬영지가 없어요.
-                  </p>
+                  <StateFeedback
+                    title="더 추가할 수 있는 촬영지가 없어요."
+                    description="현재 선택한 작품과 배우 조건에서 추가 가능한 다른 촬영지를 찾지 못했습니다."
+                  />
                 )}
+
               {!isLoadingCandidates &&
                 !candidateError &&
                 addPlaceCandidates &&
@@ -1332,13 +1623,16 @@ function CourseContent() {
                       <span className={styles.contentBadge}>
                         {candidate.contentTitle}
                       </span>
+
                       <h3>{candidate.place.name}</h3>
+
                       {candidate.place.address && (
                         <p className={styles.address}>
                           {candidate.place.address}
                         </p>
                       )}
                     </div>
+
                     <button
                       type="button"
                       onClick={() => addCourseStop(candidate)}
@@ -1354,15 +1648,18 @@ function CourseContent() {
 
         <footer className={styles.footer}>
           <p>수정한 코스는 이 브라우저에 자동 저장돼요.</p>
+
           <button type="button" onClick={resetCourseChanges}>
             수정 내용 초기화
           </button>
+
           <p className={styles.footnote}>
             체류 시간은 여행 가능 시간에서 도보 시간을 제외한 뒤 장소마다 나눈
             예상치예요. 실제 체류 시간은 자유롭게 조절해 주세요.
           </p>
         </footer>
       </div>
+
       {detailTarget && (
         <PlaceDetailDialog
           key={`${detailTarget.contentId}-${detailTarget.place.id}`}
@@ -1382,9 +1679,10 @@ export default function CoursePage() {
       fallback={
         <main className={styles.page}>
           <div className={styles.shell}>
-            <p className={styles.empty} role="status">
-              나만의 코스를 불러오고 있어요…
-            </p>
+            <StateFeedback
+              title="나만의 코스를 불러오고 있어요."
+              description="선택한 촬영지와 여행 조건을 확인하고 있습니다."
+            />
           </div>
         </main>
       }

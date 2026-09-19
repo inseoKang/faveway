@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 
 type RouteStop = {
   placeId: number;
+  latitude: number | null;
+  longitude: number | null;
+  name: string;
+};
+
+type ValidRouteStop = RouteStop & {
   latitude: number;
   longitude: number;
-  name: string;
 };
 
 type WalkingRouteRequest = {
@@ -59,20 +64,33 @@ function isValidRouteStop(value: unknown): value is RouteStop {
 
   const stop = value as Partial<RouteStop>;
 
+  const latitudeIsValid =
+    stop.latitude === null || isFiniteCoordinate(stop.latitude);
+
+  const longitudeIsValid =
+    stop.longitude === null || isFiniteCoordinate(stop.longitude);
+
   return (
     typeof stop.placeId === "number" &&
     Number.isInteger(stop.placeId) &&
-    isFiniteCoordinate(stop.latitude) &&
-    isFiniteCoordinate(stop.longitude) &&
+    latitudeIsValid &&
+    longitudeIsValid &&
     typeof stop.name === "string" &&
     stop.name.trim().length > 0
   );
 }
 
+function hasValidCoordinates(stop: RouteStop): stop is ValidRouteStop {
+  return (
+    isFiniteCoordinate(stop.latitude) &&
+    isFiniteCoordinate(stop.longitude)
+  );
+}
+
 async function fetchTmapSegment(
   appKey: string,
-  start: RouteStop,
-  end: RouteStop,
+  start: ValidRouteStop,
+  end: ValidRouteStop,
 ): Promise<RouteSegmentResponse> {
   try {
     const response = await fetch(
@@ -241,7 +259,21 @@ export async function POST(request: Request) {
     const start = body.stops[index - 1];
     const end = body.stops[index];
 
+    if (!hasValidCoordinates(start) || !hasValidCoordinates(end)) {
+      segments.push({
+        fromPlaceId: start.placeId,
+        toPlaceId: end.placeId,
+        distanceMeters: null,
+        durationSeconds: null,
+        path: [],
+        success: false,
+      });
+
+      continue;
+    }
+
     const segment = await fetchTmapSegment(appKey, start, end);
+
     segments.push(segment);
   }
 
