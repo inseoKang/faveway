@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./course.module.css";
 
 import BackButton from "@/components/common/BackButton";
@@ -39,11 +39,20 @@ type CourseStop = {
   place: Place;
 };
 
+type RouteSelectionReason =
+  | "NORMAL"
+  | "ONLY_ONE_CANDIDATE"
+  | "WALKING_LIMIT"
+  | "DURATION_LIMIT"
+  | "MULTIPLE_CONSTRAINTS";
+
 type CourseData = {
   contentIds: number[];
   actorIds: number[];
   durationMinutes: number;
   maxWalkingMinutes: number | null;
+  candidateCount?: number;
+  routeSelectionReason?: RouteSelectionReason;
   totalDistanceKm: number;
   totalWalkingMinutes: number;
   stops: CourseStop[];
@@ -130,6 +139,14 @@ type WalkingRouteStatus =
 
 const COURSE_STORAGE_PREFIX = "faveway:course";
 
+const ROUTE_SELECTION_REASONS: RouteSelectionReason[] = [
+  "NORMAL",
+  "ONLY_ONE_CANDIDATE",
+  "WALKING_LIMIT",
+  "DURATION_LIMIT",
+  "MULTIPLE_CONSTRAINTS",
+];
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -140,6 +157,15 @@ function isIntegerArray(value: unknown): value is number[] {
     value.every(
       (item) => typeof item === "number" && Number.isInteger(item),
     )
+  );
+}
+
+function isRouteSelectionReason(
+  value: unknown,
+): value is RouteSelectionReason {
+  return (
+    typeof value === "string" &&
+    ROUTE_SELECTION_REASONS.includes(value as RouteSelectionReason)
   );
 }
 
@@ -160,10 +186,7 @@ function isValidCourseStop(value: unknown): value is CourseStop {
     !isFiniteNumber(stop.walkingMinutesFromPrevious) ||
     typeof stop.relationType !== "string" ||
     typeof stop.verificationStatus !== "string" ||
-    !(
-      stop.verifiedFact === null ||
-      typeof stop.verifiedFact === "string"
-    ) ||
+    !(stop.verifiedFact === null || typeof stop.verifiedFact === "string") ||
     !stop.place ||
     typeof stop.place !== "object"
   ) {
@@ -190,6 +213,14 @@ function isValidCourseData(value: unknown): value is CourseData {
 
   const course = value as Partial<CourseData>;
 
+  const candidateCountIsValid =
+    course.candidateCount === undefined ||
+    (Number.isInteger(course.candidateCount) && course.candidateCount >= 1);
+
+  const routeSelectionReasonIsValid =
+    course.routeSelectionReason === undefined ||
+    isRouteSelectionReason(course.routeSelectionReason);
+
   return (
     isIntegerArray(course.contentIds) &&
     isIntegerArray(course.actorIds) &&
@@ -198,6 +229,8 @@ function isValidCourseData(value: unknown): value is CourseData {
     (course.maxWalkingMinutes === null ||
       (isFiniteNumber(course.maxWalkingMinutes) &&
         course.maxWalkingMinutes > 0)) &&
+    candidateCountIsValid &&
+    routeSelectionReasonIsValid &&
     isFiniteNumber(course.totalDistanceKm) &&
     course.totalDistanceKm >= 0 &&
     isFiniteNumber(course.totalWalkingMinutes) &&
@@ -346,7 +379,58 @@ function validateCourse(course: CourseData): CourseValidation {
   };
 }
 
+function getSingleStopExplanation(course: CourseData) {
+  if (course.stops.length !== 1) {
+    return null;
+  }
+
+  const candidateCount = course.candidateCount ?? 1;
+  const hasActorFilter = course.actorIds.length > 0;
+
+  switch (course.routeSelectionReason) {
+    case "ONLY_ONE_CANDIDATE":
+      return {
+        title: "이 코스가 1곳으로 구성된 이유",
+        description: hasActorFilter
+          ? "선택한 배우가 등장한 장면과 연결된 촬영지 중 현재 코스에 사용할 수 있는 장소가 1곳 확인됐어요."
+          : "선택한 작품 범위에서 현재 코스에 사용할 수 있는 촬영지가 1곳 확인됐어요.",
+      };
+
+    case "WALKING_LIMIT":
+      return {
+        title: "도보 조건을 기준으로 1곳을 선택했어요",
+        description:
+          course.maxWalkingMinutes !== null
+            ? `촬영지 후보는 ${candidateCount}곳이지만, 장소 사이의 예상 도보 거리를 비교했을 때 한 구간 ${course.maxWalkingMinutes}분 이내 조건으로 함께 방문할 수 있는 2곳 이상의 조합을 찾지 못했어요.`
+            : `촬영지 후보는 ${candidateCount}곳이지만 현재 조건으로 함께 방문할 수 있는 조합을 찾지 못했어요.`,
+      };
+
+    case "DURATION_LIMIT":
+      return {
+        title: "여행 시간을 기준으로 1곳을 선택했어요",
+        description: `촬영지 후보는 ${candidateCount}곳이지만, 이동 시간과 장소별 최소 체류 시간을 포함하면 ${course.durationMinutes / 60}시간 안에 2곳 이상 방문할 수 있는 조합을 찾지 못했어요.`,
+      };
+
+    case "MULTIPLE_CONSTRAINTS":
+      return {
+        title: "여행 시간과 도보 조건을 함께 고려했어요",
+        description:
+          course.maxWalkingMinutes !== null
+            ? `촬영지 후보는 ${candidateCount}곳이지만, ${course.durationMinutes / 60}시간의 여행 시간과 한 구간 ${course.maxWalkingMinutes}분 이내 도보 조건을 함께 적용하면 2곳 이상 방문 가능한 조합을 찾지 못했어요.`
+            : `촬영지 후보는 ${candidateCount}곳이지만 현재 여행 조건을 적용하면 2곳 이상 방문 가능한 조합을 찾지 못했어요.`,
+      };
+
+    default:
+      return {
+        title: "현재 코스는 촬영지 1곳으로 구성됐어요",
+        description:
+          "현재 선택한 작품과 여행 조건을 기준으로 이 장소를 중심으로 코스를 구성했어요.",
+      };
+  }
+}
+
 function CourseContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
@@ -367,10 +451,22 @@ function CourseContent() {
 
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
+  const [isExpandingScope, setIsExpandingScope] = useState(false);
+  const [scopeExpansionError, setScopeExpansionError] = useState<string | null>(
+    null,
+  );
+
   const stopRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const rawData = searchParams.get("data");
   const title = searchParams.get("title");
+
+  const actorNames =
+    searchParams
+      .get("actorNames")
+      ?.split(",")
+      .map((name) => name.trim())
+      .filter(Boolean) ?? [];
 
   const initialCourseResult = useMemo(() => {
     if (!rawData) {
@@ -1126,6 +1222,110 @@ function CourseContent() {
     }, 0);
   }
 
+  function goToPlanningWithCurrentSelection() {
+    if (!course) {
+      return;
+    }
+
+    const params = new URLSearchParams({
+      contentIds: course.contentIds.join(","),
+      title: title ?? "나의 여행 코스",
+    });
+
+    if (course.actorIds.length > 0) {
+      params.set("actorIds", course.actorIds.join(","));
+
+      if (actorNames.length > 0) {
+        params.set("actorNames", actorNames.join(","));
+      }
+    }
+
+    router.push(`/planning?${params.toString()}`);
+  }
+
+  function goToPlan() {
+    router.push("/plan");
+  }
+
+  async function expandCourseWithoutActorFilter() {
+    if (!course || course.actorIds.length === 0 || isExpandingScope) {
+      return;
+    }
+
+    try {
+      setIsExpandingScope(true);
+      setScopeExpansionError(null);
+
+      const response = await fetch("/api/trips", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contentIds: course.contentIds,
+          actorIds: [],
+          durationMinutes: course.durationMinutes,
+          maxWalkingMinutes: course.maxWalkingMinutes,
+        }),
+      });
+
+      let result: {
+        data?: unknown;
+        message?: string;
+      } | null = null;
+
+      try {
+        result = (await response.json()) as {
+          data?: unknown;
+          message?: string;
+        };
+      } catch {
+        result = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ??
+            "작품 전체 촬영지를 기준으로 코스를 다시 만들지 못했습니다.",
+        );
+      }
+
+      if (!result?.data || !isValidCourseData(result.data)) {
+        throw new Error("새로 생성된 코스 정보를 확인하지 못했습니다.");
+      }
+
+      const nextCourse = result.data;
+
+      setCourse(nextCourse);
+      setSelectedPlaceId(null);
+      setDetailTarget(null);
+      setIsAddPlaceOpen(false);
+      setAddPlaceCandidates(null);
+      setCandidateError(null);
+      setScopeExpansionError(null);
+      setWalkingRouteSegments([]);
+      setWalkingRouteStatus(
+        nextCourse.stops.length >= 2 ? "loading" : "idle",
+      );
+
+      const params = new URLSearchParams({
+        data: encodeURIComponent(JSON.stringify(nextCourse)),
+        title: title ?? "나의 여행 코스",
+      });
+
+      router.replace(`/course?${params.toString()}`);
+      setIsExpandingScope(false);
+    } catch (error) {
+      setScopeExpansionError(
+        error instanceof Error
+          ? error.message
+          : "코스 범위를 넓히는 중 오류가 발생했습니다.",
+      );
+
+      setIsExpandingScope(false);
+    }
+  }
+
   if (initialCourseResult.status === "missing") {
     return (
       <main className={styles.page}>
@@ -1180,14 +1380,18 @@ function CourseContent() {
 
   const totalMinutes = course.totalWalkingMinutes + totalStayMinutes;
 
+  const singleStopExplanation = getSingleStopExplanation(course);
+
   const routeStatusText =
-    walkingRouteStatus === "idle"
-      ? "장소가 2곳 이상이면 도보 경로를 안내해요."
-      : walkingRouteStatus === "loading"
-        ? "실제 도보 경로를 확인하고 있어요. 현재 수치는 임시 예상치예요."
-        : walkingRouteStatus === "real"
-          ? "실제 도보 경로 기준 · 소요 시간은 예상치예요."
-          : null;
+    course.stops.length < 2
+      ? null
+      : walkingRouteStatus === "idle"
+        ? null
+        : walkingRouteStatus === "loading"
+          ? "실제 도보 경로를 확인하고 있어요. 현재 수치는 임시 예상치예요."
+          : walkingRouteStatus === "real"
+            ? "실제 도보 경로 기준 · 소요 시간은 예상치예요."
+            : null;
 
   return (
     <main className={styles.page}>
@@ -1202,7 +1406,9 @@ function CourseContent() {
 
         <header className={styles.header}>
           <p className={styles.eyebrow}>MY FAVORITE WAY</p>
+
           <h1>{title || "나의 여행 코스"}</h1>
+
           <p className={styles.intro}>
             좋아하는 장면을 따라, 촬영지 {course.stops.length}곳을 걸어요.
           </p>
@@ -1227,6 +1433,7 @@ function CourseContent() {
           <dl className={styles.metrics}>
             <div>
               <dt>도보 시간</dt>
+
               <dd>
                 {course.totalWalkingMinutes}
                 <span>분</span>
@@ -1235,6 +1442,7 @@ function CourseContent() {
 
             <div>
               <dt>이동 거리</dt>
+
               <dd>
                 {course.totalDistanceKm}
                 <span>km</span>
@@ -1243,6 +1451,7 @@ function CourseContent() {
 
             <div>
               <dt>체류 시간</dt>
+
               <dd>
                 {totalStayMinutes}
                 <span>분</span>
@@ -1261,6 +1470,76 @@ function CourseContent() {
             </span>
           </div>
         </section>
+
+        {singleStopExplanation && (
+          <section
+            className="mt-5 rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm"
+            aria-label="코스 구성 안내"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-primary"
+                aria-hidden="true"
+              >
+                i
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-foreground">
+                  {singleStopExplanation.title}
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {singleStopExplanation.description}
+                </p>
+
+                {scopeExpansionError && (
+                  <p className="mt-3 text-sm leading-6 text-red-600" role="alert">
+                    {scopeExpansionError}
+                  </p>
+                )}
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {course.routeSelectionReason === "ONLY_ONE_CANDIDATE" &&
+                    course.actorIds.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={isExpandingScope}
+                        onClick={() => void expandCourseWithoutActorFilter()}
+                        className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isExpandingScope
+                          ? "작품 전체로 다시 만드는 중…"
+                          : "배우 조건 없이 작품 전체로 넓혀보기"}
+                      </button>
+                    )}
+
+                  {(course.routeSelectionReason === "WALKING_LIMIT" ||
+                    course.routeSelectionReason === "DURATION_LIMIT" ||
+                    course.routeSelectionReason ===
+                      "MULTIPLE_CONSTRAINTS") && (
+                    <button
+                      type="button"
+                      onClick={goToPlanningWithCurrentSelection}
+                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition"
+                    >
+                      여행 조건 다시 설정하기
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={isExpandingScope}
+                    onClick={goToPlan}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    작품 / 배우 다시 선택하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {storageWarning && (
           <InlineWarning
@@ -1293,6 +1572,7 @@ function CourseContent() {
         {!validation.isValid && (
           <section className={styles.warning} aria-label="여행 조건 초과 안내">
             <h2>여행 조건을 조금 벗어났어요</h2>
+
             <p>방문 순서를 바꾸거나 장소를 줄여보세요.</p>
 
             {validation.walkingViolations.map((violation) => (
@@ -1335,6 +1615,7 @@ function CourseContent() {
         >
           <div className={styles.sectionHeading}>
             <h2 id="course-map-title">한눈에 보는 코스</h2>
+
             <span className={styles.caption}>번호는 방문 순서예요</span>
           </div>
 
@@ -1471,6 +1752,7 @@ function CourseContent() {
                     {stop.verifiedFact && (
                       <div className={styles.scene}>
                         <span>이 장소의 이야기</span>
+
                         <p>{stop.verifiedFact}</p>
                       </div>
                     )}
