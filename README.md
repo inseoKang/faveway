@@ -8,7 +8,9 @@ FAVEWAY는 드라마·영화·배우를 기준으로 실제 촬영지를 탐색�
 일반적인 AI 여행 추천처럼 장소를 임의로 생성하지 않고,
 **DB에 저장된 실제 촬영지와 Actor → Scene → Place 관계를 기준으로 후보를 검증**합니다.
 
-선택된 장소는 TMAP 실제 보행 경로를 기준으로 이동 거리와 시간을 계산하고,
+초기 Course는 후보 Route를 빠르게 비교하기 위해 Haversine 기반 거리와 예상 도보 시간을 사용하고,
+Course 화면에서는 TMAP 실제 보행 경로를 다시 조회해 거리와 시간을 갱신합니다.
+
 사용자는 완성된 Course에서 장소를 추가·삭제하거나 순서를 변경할 수 있습니다.
 
 ---
@@ -37,9 +39,12 @@ Course 생성
 - 여행 가능 시간: 3시간 / 4시간 / 5시간
 - 한 구간 최대 도보 시간: 10분 / 20분 / 30분 / 상관없음
 - 복수 작품(`contentIds`)과 복수 배우(`actorIds`) 지원
-- TMAP 실제 보행 경로를 기준으로 거리·시간 계산
+- Haversine 기반 초기 Route 비교
+- Course 진입 후 TMAP 실제 보행 경로로 거리·시간 갱신
 - Course에서 장소 추가 / 삭제 / 순서 변경 가능
 - 변경된 Course를 `localStorage`에 저장하고 복원
+- 데이터가 부족해 1개 장소 Course가 생성된 경우 이유 안내
+- 사용자가 선택한 경우에만 배우 조건을 해제해 작품 전체 촬영지로 범위 확장
 
 ### 촬영지 둘러보기
 
@@ -91,6 +96,8 @@ FAVEWAY의 핵심 원칙은 다음과 같습니다.
 - 장면 정보가 없는 경우 없는 사실을 만들어내지 않음
 - 동일 작품 + 동일 장소는 중복 제거
 - Actor → Scene → Place 관계를 추천 근거로 사용
+- 데이터 부족 시 일반 관광지를 자동으로 추가하지 않음
+- 배우 조건 확장은 사용자가 직접 선택한 경우에만 수행
 
 ---
 
@@ -107,13 +114,13 @@ Actor → Scene → Place Filtering
 ↓
 Active Place Filter
 ↓
-Content + Place Deduplication
+Place Deduplication
 ↓
 Coordinate Filter
 ↓
 Route Combination
 ↓
-TMAP Walking Route
+Haversine Distance / Walking Estimate
 ↓
 Walking Constraint
 ↓
@@ -121,10 +128,14 @@ Duration Constraint
 ↓
 Distance Optimization
 ↓
-Course
+Course 생성
+↓
+TMAP Actual Walking Route
+↓
+Course Summary / Kakao Polyline 갱신
 ```
 
-기본 체류 시간은 장소당 45분으로 계산합니다.
+기본 체류 시간은 장소당 최소 45분을 기준으로 계산합니다.
 
 여행 가능 시간에 따라 최대 방문 장소 수를 제한합니다.
 
@@ -132,16 +143,67 @@ Course
 - 4시간 → 최대 3곳
 - 5시간 → 최대 4곳
 
-실제 이동 거리와 도보 시간은 TMAP 보행자 경로 API를 사용합니다.
+초기 Course 생성 단계에서는
+여러 Route 조합을 빠르게 비교하기 위해 Haversine 기반 거리를 사용합니다.
 
-Course 전체 장소를 서버에 한 번 전달하면,
-서버 Route Handler에서 인접 장소별 TMAP 경로를 순차 조회한 뒤
-거리·시간·geometry를 통합합니다.
+Course 화면에 진입한 뒤에는
+Course 전체 장소를 서버에 한 번 전달하고,
+Next.js Route Handler가 인접 장소별 TMAP 보행 경로를 조회합니다.
 
-TMAP 조회에 실패한 구간은 Haversine 기반 거리와 예상 도보 시간을 사용해 fallback 처리합니다.
+TMAP 조회 결과의 실제 거리·시간·path는
+Course Summary와 Kakao Polyline에 반영됩니다.
+
+TMAP 조회에 실패한 구간은
+Haversine 기반 거리와 예상 도보 시간을 사용해 fallback 처리합니다.
 
 Kakao Map은 지도 Marker / Polyline UI를 담당하고,
-실제 경로 거리와 이동 시간 계산은 TMAP이 담당합니다.
+TMAP은 실제 보행 경로를 담당합니다.
+
+---
+
+## 데이터 부족 Fallback
+
+FAVEWAY는 촬영지가 부족하다는 이유로
+없는 장소나 장면을 만들어내지 않습니다.
+
+```text
+촬영지 0개
+→ Empty
+
+촬영지 1개
+→ 1개 장소 Course 허용
+
+촬영지 2개 이상
+→ 정상 Route 탐색
+```
+
+1개 장소 Course가 생성되면
+서버가 다음과 같은 이유를 구분해 반환합니다.
+
+```text
+ONLY_ONE_CANDIDATE
+WALKING_LIMIT
+DURATION_LIMIT
+MULTIPLE_CONSTRAINTS
+```
+
+Course 화면에서는 이 값을 기준으로
+왜 현재 결과가 1곳인지 설명합니다.
+
+배우 조건으로 후보가 부족한 경우에는
+자동으로 작품 전체 촬영지까지 확장하지 않습니다.
+
+사용자가:
+
+```text
+배우 조건 없이 작품 전체로 넓혀보기
+```
+
+를 직접 선택한 경우에만
+작품, 여행 시간, 도보 조건은 유지하고
+`actorIds`만 빈 배열로 바꿔 Course를 다시 생성합니다.
+
+자세한 정책은 [`docs/data-fallback-policy.md`](docs/data-fallback-policy.md)를 참고하세요.
 
 ---
 
@@ -186,6 +248,7 @@ Kakao Map은 지도 Marker / Polyline UI를 담당하고,
 - Walking Constraint Validation
 - Duration Validation
 - Distance Optimization
+- Data Fallback Reason Classification
 
 ### Persistence
 
@@ -229,12 +292,16 @@ src/
 - [x] 작품 / 배우 기반 촬영지 탐색
 - [x] Actor → Scene → Place 관계 기반 필터링
 - [x] 여행 시간 / 최대 도보 시간 조건 기반 Course 생성
+- [x] 1개 장소 Course 및 이유 안내
+- [x] 사용자 선택 기반 배우 조건 해제 / 작품 범위 확장
 - [x] Kakao Map 지도 및 Marker / Polyline 동기화
 - [x] TMAP 실제 도보 경로 연동
+- [x] TMAP 실패 구간 Haversine fallback
 - [x] Course 장소 추가 / 삭제 / 순서 변경
 - [x] Course 상태 `localStorage` 저장 / 복원
 - [x] 장소 상세의 Scene / Episode / Actor / 검증 정보 표시
-- [x] Explore / Map 상태 처리 1차 정리
+- [x] Explore / Planning / Course Loading / Empty / Error / Retry 정리
+- [ ] 촬영지 상세 UX 고도화
 - [ ] 데이터 확장 및 정제
 - [ ] AI Course Ranking
 - [ ] AI Docent
@@ -294,6 +361,7 @@ npm run build
 - [`docs/database.md`](docs/database.md) — 데이터 모델 및 관계
 - [`docs/api.md`](docs/api.md) — API 정리
 - [`docs/recommendation.md`](docs/recommendation.md) — Course 생성 및 추천 로직
+- [`docs/data-fallback-policy.md`](docs/data-fallback-policy.md) — 데이터 부족 및 범위 확장 정책
 - [`docs/roadmap.md`](docs/roadmap.md) — 현재 상태와 향후 개발 계획
 - [`docs/dev-log.md`](docs/dev-log.md) — 개발 과정과 주요 설계 판단 기록
 

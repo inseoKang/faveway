@@ -147,6 +147,8 @@ Place
 - [x] 구간별 최대 도보 시간 검증
 - [x] 체류 시간 계산
 - [x] 거리 최소 Route 선택
+- [x] 1개 장소 Course 허용
+- [x] Course 선택 이유 metadata 반환
 
 현재 최대 장소 수:
 
@@ -331,66 +333,42 @@ Place
 
 ---
 
-# 앞으로 할 작업
+## Data Fallback UX
 
-## 1. 데이터 부족 Fallback
+데이터가 부족하더라도 존재하지 않는 촬영지나 장면 정보를 생성하지 않습니다.
 
-데이터가 부족한 경우에도
-존재하지 않는 촬영지나 장면 정보를 임의로 생성하지 않습니다.
+- [x] 촬영지 0개 → Empty
+- [x] 촬영지 1개 → 1개 장소 Course 허용
+- [x] 촬영지 2개 이상 → 정상 Route 탐색
+- [x] 좌표 없는 장소 → Explore / Detail 유지, Course 제외
+- [x] Scene 없는 장소 → Scene 정보 추측 금지
+- [x] Actor → Scene → Place 관계가 없으면 배우 관련 장소로 추측하지 않음
+- [x] 조건에 맞는 Route가 없으면 Empty
+- [x] 가능한 최대 장소 수부터 감소하며 Route 탐색
+- [x] 일반 관광지 자동 추가 금지
+- [x] 자동 범위 확장 금지
+- [x] 1개 장소 Course 이유 안내
+- [x] `ONLY_ONE_CANDIDATE` 구분
+- [x] `WALKING_LIMIT` 구분
+- [x] `DURATION_LIMIT` 구분
+- [x] `MULTIPLE_CONSTRAINTS` 구분
+- [x] 배우 조건 없이 작품 전체로 넓혀보기
+- [x] 범위 확장 시 작품 유지
+- [x] 범위 확장 시 여행 시간 유지
+- [x] 범위 확장 시 최대 도보 시간 유지
+- [x] 사용자가 선택한 경우에만 `actorIds = []`로 재요청
+- [x] 작품 / 배우 재선택 UX
+- [x] 여행 조건 재설정 UX
 
 상세 정책:
 
 `docs/data-fallback-policy.md`
 
-### 정책 정의
-
-- [x] 촬영지 0개 처리 기준
-- [x] 촬영지 1개 Course 허용 여부
-- [x] 촬영지 2개 이상 정상 Route 처리 기준
-- [x] 좌표 없는 장소 처리 기준
-- [x] Scene 없는 장소 처리 기준
-- [x] Episode 없는 경우 처리 기준
-- [x] Actor → Scene 관계 부족 처리 기준
-- [x] 조건에 맞는 Route가 없는 경우 처리 기준
-- [x] Course 장소 수 감소 정책
-- [x] 일반 장소 자동 추가 여부
-- [x] 자동 범위 확장 여부
-- [x] AI Recommendation 데이터 부족 원칙
-- [x] AI Docent 데이터 부족 원칙
-- [x] source 부족 처리 원칙
-
-### 구현
-
-- [x] 후보 부족 Empty 안내
-- [x] 조건에 맞는 Route 없음 안내
-- [x] 배우 기준 촬영지 없음 안내
-- [ ] 1개 장소 Course 안내 UI
-- [ ] 작품 / 배우 범위 확장 UX
-- [ ] AI Docent 정보 부족 처리
-- [ ] AI Recommendation Candidate 검증
-
-현재 원칙:
-
-```text
-데이터 부족
-≠
-AI로 사실 생성
-```
-
-```text
-Place 없음
-→ 생성하지 않음
-
-Scene 없음
-→ 추측하지 않음
-
-Candidate 부족
-→ 자동 일반 장소 추가하지 않음
-```
-
 ---
 
-## 2. 촬영지 상세 UX 고도화
+# 앞으로 할 작업
+
+## 1. 촬영지 상세 UX 고도화
 
 기본 데이터 표시는 이미 구현되어 있습니다.
 
@@ -405,36 +383,7 @@ Candidate 부족
 
 ---
 
-## 3. Data 확장 및 정제
-
-현재 도깨비 데이터를 기준으로
-핵심 데이터 구조를 검증했습니다.
-
-완료:
-
-- [x] Content
-- [x] Actor
-- [x] Scene
-- [x] Place
-- [x] scene_actors
-- [x] scene_places
-- [x] Content ↔ Place 관계 검증
-- [x] 도깨비 데이터 정리
-
-다음:
-
-- [ ] 데이터 소스별 신뢰도 기준
-- [ ] Scene 없는 촬영지 저장 정책 문서 반영
-- [ ] 동일 장소 병합 기준
-- [ ] source 관리 기준
-- [ ] Import CSV 포맷 고정
-- [ ] 추가 작품 데이터 선정
-- [ ] 추가 작품 2~3개 구축
-- [ ] 추가 작품 Actor → Scene → Place 연결 검증
-
----
-
-## 4. AI Docent
+## 2. AI Docent
 
 FAVEWAY의 주요 AI 기능입니다.
 
@@ -507,7 +456,36 @@ Docent
 
 ---
 
-## 5. AI Recommendation
+## 3. Data 확장 및 정제
+
+현재 도깨비 데이터를 기준으로
+핵심 데이터 구조를 검증했습니다.
+
+완료:
+
+- [x] Content
+- [x] Actor
+- [x] Scene
+- [x] Place
+- [x] scene_actors
+- [x] scene_places
+- [x] Content ↔ Place 관계 검증
+- [x] 도깨비 데이터 정리
+
+다음:
+
+- [ ] 데이터 소스별 신뢰도 기준
+- [ ] Scene 없는 촬영지 저장 정책 문서 반영
+- [ ] 동일 장소 병합 기준
+- [ ] source 관리 기준
+- [ ] Import CSV 포맷 고정
+- [ ] 추가 작품 데이터 선정
+- [ ] 추가 작품 2~3개 구축
+- [ ] 추가 작품 Actor → Scene → Place 연결 검증
+
+---
+
+## 4. AI Recommendation
 
 현재 Rule-based Recommendation 위에
 개인화 Ranking을 추가합니다.
@@ -550,7 +528,7 @@ Course
 
 ---
 
-## 6. Deployment
+## 5. Deployment
 
 - [ ] Production 환경변수 정리
 - [ ] Supabase Production 설정
@@ -569,7 +547,7 @@ Course
 
 ---
 
-## 7. User Features
+## 6. User Features
 
 핵심 MVP 이후 확장합니다.
 
@@ -681,31 +659,27 @@ GENERAL_PLACE
 # 현재 개발 우선순위
 
 ```text
-1. 데이터 부족 Fallback 구현
+1. 촬영지 상세 UX 보완
 ↓
-2. 촬영지 상세 UX 보완
+2. AI Docent
 ↓
-3. AI Docent
+3. Data 확장 및 정제
 ↓
-4. Data 확장 및 정제
+4. AI Recommendation
 ↓
-5. AI Recommendation
+5. Deployment
 ↓
-6. Deployment
-↓
-7. User Features
+6. User Features
 ```
 
 현재 가장 가까운 다음 작업:
 
 ```text
-1개 장소 Course 안내 UI
-↓
-작품 / 배우 범위 확장 UX
-↓
 촬영지 상세 UX 보완
 ↓
 AI Docent 설계 및 구현
+↓
+추가 작품 데이터 확장
 ```
 
 ---

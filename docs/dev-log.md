@@ -792,6 +792,286 @@ Validation
 
 ---
 
+# 2026-09-19 | Planning 상태 처리 및 Trip Error 분리
+
+## 문제
+
+Planning에서는 사용자의 조건 입력과 Trip 생성 API가 직접 연결되기 때문에
+잘못된 진입, 후보 부족, 네트워크 실패, 조건 불충족을 하나의 오류로 처리하면
+사용자가 무엇을 바꿔야 하는지 알기 어렵다.
+
+## 판단
+
+다음 상태를 구분했다.
+
+```text
+잘못된 진입
+Loading
+Empty
+Error
+Retry
+조건 불충족
+```
+
+또한 Trip API가 사용자에게 의미 있는 오류 코드를 반환하도록 정리했다.
+
+## 구현
+
+`POST /api/trips`에서 다음 오류 코드를 사용한다.
+
+```text
+INVALID_TRIP_CONDITIONS
+TRIP_CANDIDATES_FETCH_FAILED
+NO_FILMING_LOCATIONS
+NO_COORDINATED_FILMING_LOCATIONS
+NO_AVAILABLE_ROUTE
+TRIP_CREATION_FAILED
+```
+
+Frontend에서는 서버 오류 코드와 HTTP 상태를 이용해
+Empty와 Error를 분리한다.
+
+추가로:
+
+- 중복 요청 방지
+- `상관없음` 선택 시 `maxWalkingMinutes = null` 허용
+- Retry
+- 네트워크 오류 처리
+- 비정상 JSON 응답 처리
+- 입력 변경 시 이전 오류 상태 정리
+
+를 적용했다.
+
+## 포트폴리오 포인트
+
+API 오류를 단순 문자열이 아니라
+Frontend가 사용자 행동으로 연결할 수 있는 상태 계약으로 설계했다.
+
+---
+
+# 2026-09-19 | 데이터 부족 Fallback 및 1개 장소 Course UX
+
+## 문제
+
+최종 Course가 1곳으로 생성됐을 때
+사용자는 왜 1곳만 선택됐는지 알 수 없었다.
+
+가능한 원인은 서로 다르다.
+
+```text
+후보 자체가 1곳
+도보 조건 때문에 1곳
+여행 시간 때문에 1곳
+여행 시간 + 도보 조건 때문에 1곳
+```
+
+이 이유를 구분하지 않고
+단순히 "촬영지가 1곳이에요"라고 안내하면
+사용자가 다음에 어떤 행동을 해야 하는지 판단하기 어렵다.
+
+또한 배우 기준 후보가 부족할 때
+애플리케이션이 자동으로 작품 전체 촬영지까지 포함하면
+사용자가 선택한 배우 조건을 암묵적으로 변경하게 된다.
+
+## 판단
+
+1개 장소 Course는 실패가 아니라 정상 결과로 허용한다.
+
+대신 서버가 Course가 1곳이 된 이유를 계산해
+Frontend에 metadata로 전달한다.
+
+범위 확장은 자동으로 수행하지 않고
+사용자가 직접 선택한 경우에만 배우 필터를 제거한다.
+
+핵심 원칙:
+
+```text
+데이터 부족
+≠
+없는 장소 생성
+
+데이터 부족
+≠
+자동 조건 변경
+
+데이터 부족
+=
+현재 결과의 이유 설명
++
+사용자에게 다음 행동 제공
+```
+
+## 구현 1. Route Selection Reason
+
+`POST /api/trips` 응답에
+`candidateCount`와 `routeSelectionReason`을 추가했다.
+
+지원 상태:
+
+```text
+NORMAL
+ONLY_ONE_CANDIDATE
+WALKING_LIMIT
+DURATION_LIMIT
+MULTIPLE_CONSTRAINTS
+```
+
+### `NORMAL`
+
+2곳 이상의 유효한 Course가 생성된 경우.
+
+### `ONLY_ONE_CANDIDATE`
+
+현재 작품 / 배우 조건과 좌표 검증을 통과한
+Course 후보 자체가 1곳인 경우.
+
+### `WALKING_LIMIT`
+
+후보는 여러 곳이지만
+최대 도보 시간 조건 때문에 2곳 이상의 Route를 만들 수 없는 경우.
+
+### `DURATION_LIMIT`
+
+후보는 여러 곳이지만
+이동 시간과 장소별 최소 체류 시간을 포함하면
+여행 가능 시간 안에 2곳 이상 방문할 수 없는 경우.
+
+### `MULTIPLE_CONSTRAINTS`
+
+도보 조건과 여행 시간 조건을 함께 적용했을 때
+2곳 이상의 유효 Route를 만들 수 없는 경우.
+
+## 구현 2. 1개 장소 Course 설명 UI
+
+기존의 단순 Warning 대신
+`routeSelectionReason`에 따라 설명 문구를 다르게 표시한다.
+
+예:
+
+```text
+이 코스가 1곳으로 구성된 이유
+
+선택한 배우가 등장한 장면과 연결된 촬영지 중
+현재 코스에 사용할 수 있는 장소가 1곳 확인됐어요.
+```
+
+도보 조건 때문인 경우:
+
+```text
+도보 조건을 기준으로 1곳을 선택했어요.
+
+촬영지 후보는 여러 곳이지만,
+현재 최대 도보 시간 조건으로 함께 방문할 수 있는
+2곳 이상의 조합을 찾지 못했어요.
+```
+
+## 구현 3. 이유별 다음 행동
+
+배우 조건으로 후보가 1곳인 경우:
+
+```text
+[배우 조건 없이 작품 전체로 넓혀보기]
+[작품 / 배우 다시 선택하기]
+```
+
+도보 또는 여행 시간 조건 때문인 경우:
+
+```text
+[여행 조건 다시 설정하기]
+[작품 / 배우 다시 선택하기]
+```
+
+사용자가 결과의 원인과
+다음에 바꿀 수 있는 조건을 연결해서 이해하도록 했다.
+
+## 구현 4. 사용자 선택 기반 범위 확장
+
+`배우 조건 없이 작품 전체로 넓혀보기`를 선택하면
+동일한 `POST /api/trips`를 다시 호출한다.
+
+변경 전:
+
+```json
+{
+  "contentIds": [1],
+  "actorIds": [3],
+  "durationMinutes": 180,
+  "maxWalkingMinutes": 10
+}
+```
+
+변경 후:
+
+```json
+{
+  "contentIds": [1],
+  "actorIds": [],
+  "durationMinutes": 180,
+  "maxWalkingMinutes": 10
+}
+```
+
+유지:
+
+```text
+contentIds
+durationMinutes
+maxWalkingMinutes
+```
+
+변경:
+
+```text
+actorIds
+→ []
+```
+
+즉 작품, 여행 시간, 도보 조건은 그대로 유지하고
+배우 필터만 제거한다.
+
+## 구현 5. Course 상태 및 URL 갱신
+
+범위 확장 API가 성공하면
+새 Course를 현재 React state에 반영하고
+Next.js `router.replace()`로 URL의 Course 데이터도 갱신한다.
+
+내부 페이지 이동에는
+`window.location.assign()` 대신 Next Router를 사용하도록 정리해
+Next.js lint warning도 제거했다.
+
+새 Course 반영 시:
+
+- 선택 장소 초기화
+- 상세 Dialog 초기화
+- 장소 추가 UI 초기화
+- Candidate Error 초기화
+- 범위 확장 Error 초기화
+- Walking Route 상태 초기화
+
+를 함께 수행한다.
+
+## 결과
+
+데이터가 적은 상황을
+단순 실패 화면으로 끝내지 않고
+현재 결과가 나온 이유와 다음 행동을 연결했다.
+
+또한 사용자 동의 없이
+배우 조건이나 작품 범위를 변경하지 않는다.
+
+## 포트폴리오 포인트
+
+추천 결과의 개수만 보여주는 것이 아니라
+왜 그런 결과가 나왔는지를 API 계약으로 전달하고
+Frontend가 그 이유에 맞는 액션을 제공하도록 설계했다.
+
+설명 가능한 추천 결과,
+데이터 부족 UX,
+사용자 선택권을 보존하는 fallback,
+API와 UI 사이의 상태 계약 설계 사례로 설명할 수 있다.
+
+---
+
 # 현재 핵심 Frontend 상태 흐름
 
 ```text
@@ -905,33 +1185,18 @@ AI가 촬영지를 생성하지 않는다.
 
 # 아직 정리해야 할 항목
 
-## Planning 상태 처리
+## 촬영지 상세 UX
 
-다음 작업:
+기본 정보 표시는 구현되어 있다.
 
-- 초기 데이터 Loading
-- API Error
-- Empty
-- Trip 생성 Loading
-- Trip 생성 Error
-- Course 없음
-- Retry
-- disabled 조건
-- 중복 요청 방지
-
----
-
-## 데이터 부족 정책
-
-촬영지가 부족할 때
-없는 장소를 생성하지 않는다.
-
-검토:
+남은 작업:
 
 ```text
-범위 확장
-일반 장소 추천 여부
-사용자 안내
+Scene / Episode 표현 방식
+Actor → Scene → Place 관계 시각화
+Verification UI
+Source UX
+장소 이미지
 ```
 
 ---
