@@ -3,6 +3,8 @@
 import Script from "next/script";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import StateFeedback from "@/components/common/StateFeedback";
+
 export type ExploreMapPlace = {
   placeId: number;
   name: string;
@@ -145,25 +147,20 @@ export default function ExploreMap({
 
   if (!appKey) {
     return (
-      <div className="flex h-60 sm:h-72 items-center justify-center rounded-[20px] border border-red-200 bg-red-50 p-6 text-center">
-        <div>
-          <p className="font-semibold text-red-700">지도를 표시할 수 없어요.</p>
-
-          <p className="mt-2 text-sm leading-6 text-red-600">
-            아래 목록에서 촬영지 정보를 확인해 주세요.
-          </p>
-        </div>
-      </div>
+      <StateFeedback
+        tone="error"
+        title="지도를 표시할 수 없어요."
+        description="Kakao Map 설정을 확인해 주세요. 촬영지 목록은 계속 이용할 수 있습니다."
+      />
     );
   }
 
   if (validPlaces.length === 0) {
     return (
-      <div className="flex h-60 sm:h-72 items-center justify-center rounded-[20px] border border-gray-200 bg-gray-50 p-6 text-center">
-        <p className="text-sm leading-6 text-gray-500">
-          지도에 표시할 수 있는 좌표가 없습니다.
-        </p>
-      </div>
+      <StateFeedback
+        title="지도에 표시할 위치가 없어요."
+        description="좌표 정보가 없는 촬영지도 아래 목록에서는 계속 확인할 수 있습니다."
+      />
     );
   }
 
@@ -180,17 +177,22 @@ export default function ExploreMap({
 
       <div className="overflow-hidden rounded-[20px] border border-gray-200 bg-gray-100">
         {!sdkReady && !sdkError && (
-          <div className="flex h-60 sm:h-72 items-center justify-center text-sm text-gray-500">
-            촬영지 지도를 불러오는 중...
-          </div>
+          <StateFeedback
+            title="촬영지 지도를 불러오고 있어요."
+            description="장소 목록은 먼저 확인할 수 있습니다."
+            className="m-4"
+          />
         )}
 
         {sdkError && (
-          <div className="flex h-60 sm:h-72 items-center justify-center p-6 text-center text-sm leading-6 text-red-600">
-            지도를 불러오지 못했습니다.
-            <br />
-            잠시 후 다시 접속해 주세요. 촬영지 목록은 계속 이용할 수 있어요.
-          </div>
+          <StateFeedback
+            tone="error"
+            title="지도를 불러오지 못했어요."
+            description="촬영지 목록은 계속 이용할 수 있습니다."
+            actionLabel="다시 시도"
+            onAction={() => window.location.reload()}
+            className="m-4"
+          />
         )}
 
         <div
