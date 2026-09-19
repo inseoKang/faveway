@@ -64,6 +64,13 @@ type RouteSegment = {
   walkingMinutesFromPrevious: number;
 };
 
+type RouteSelectionReason =
+  | "NORMAL"
+  | "ONLY_ONE_CANDIDATE"
+  | "WALKING_LIMIT"
+  | "DURATION_LIMIT"
+  | "MULTIPLE_CONSTRAINTS";
+
 const MIN_STAY_MINUTES = 45;
 
 function normalizeIds(value: unknown): number[] {
@@ -319,6 +326,111 @@ function findAvailableRoute(
   return null;
 }
 
+/**
+ * 2곳 이상의 Route가 가능한지 확인한다.
+ *
+ * 실제 Course를 선택하는 함수와 달리
+ * 1곳 Route는 성공으로 보지 않는다.
+ *
+ * 이 함수는 "왜 최종 Course가 1곳이 되었는지"를
+ * 설명하기 위한 분석 용도로 사용한다.
+ */
+function hasMultiStopRoute(
+  candidates: CoordinatePlaceRelation[],
+  durationMinutes: number,
+  maxWalkingMinutes: number | null,
+): boolean {
+  if (candidates.length < 2) {
+    return false;
+  }
+
+  const maximumStopCount = Math.min(
+    getMaxStopsByDuration(durationMinutes),
+    candidates.length,
+  );
+
+  for (let stopCount = maximumStopCount; stopCount >= 2; stopCount -= 1) {
+    const route = findBestRouteForStopCount(
+      candidates,
+      stopCount,
+      durationMinutes,
+      maxWalkingMinutes,
+    );
+
+    if (route) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 최종 Course가 1곳일 때 그 이유를 분류한다.
+ *
+ * - 후보 자체가 1곳
+ * - 최대 도보 시간 때문에 여러 장소를 묶을 수 없음
+ * - 여행 가능 시간 때문에 여러 장소를 묶을 수 없음
+ * - 두 조건이 함께 영향을 줌
+ *
+ * 실제 Route 생성 결과는 변경하지 않고
+ * 사용자에게 설명할 메타데이터만 계산한다.
+ */
+function getRouteSelectionReason(
+  candidates: CoordinatePlaceRelation[],
+  route: RouteSegment[],
+  durationMinutes: number,
+  maxWalkingMinutes: number | null,
+): RouteSelectionReason {
+  if (route.length > 1) {
+    return "NORMAL";
+  }
+
+  if (candidates.length === 1) {
+    return "ONLY_ONE_CANDIDATE";
+  }
+
+  /**
+   * 도보 제한이 없다면 후보가 여러 개인데 1곳만 선택된 이유는
+   * 여행 가능 시간 제약으로 볼 수 있다.
+   */
+  if (maxWalkingMinutes === null) {
+    return "DURATION_LIMIT";
+  }
+
+  /**
+   * 여행 시간 제약을 사실상 제거한 상태에서
+   * 현재 도보 제한만 적용했을 때
+   * 2곳 이상 Route가 가능한지 확인한다.
+   */
+  const hasRouteWithWalkingLimitOnly = hasMultiStopRoute(
+    candidates,
+    Number.MAX_SAFE_INTEGER,
+    maxWalkingMinutes,
+  );
+
+  /**
+   * 도보 제한을 제거하고
+   * 현재 여행 시간만 적용했을 때
+   * 2곳 이상 Route가 가능한지 확인한다.
+   */
+  const hasRouteWithDurationLimitOnly = hasMultiStopRoute(
+    candidates,
+    durationMinutes,
+    null,
+  );
+
+  if (!hasRouteWithWalkingLimitOnly && hasRouteWithDurationLimitOnly) {
+    return "WALKING_LIMIT";
+  }
+
+  if (hasRouteWithWalkingLimitOnly && !hasRouteWithDurationLimitOnly) {
+    return "DURATION_LIMIT";
+  }
+
+  return "MULTIPLE_CONSTRAINTS";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as TripRequest;
@@ -472,6 +584,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const routeSelectionReason = getRouteSelectionReason(
+      coordinatePlaces,
+      route,
+      durationMinutes,
+      maxWalkingMinutes,
+    );
+
     const totalWalkingMinutes = route.reduce(
       (sum, stop) => sum + stop.walkingMinutesFromPrevious,
       0,
@@ -524,7 +643,31 @@ export async function POST(request: NextRequest) {
 
         candidateSource: actorIds.length > 0 ? "ACTOR_SCENE" : "CONTENT",
 
+        /**
+         * 현재 작품/배우 조건과 좌표 검증까지 통과한
+         * 실제 Course 후보 수.
+         */
         candidateCount: coordinatePlaces.length,
+
+        /**
+         * 최종 Route가 왜 현재 장소 수로 선택되었는지 설명하기 위한 값.
+         *
+         * NORMAL
+         * → 2곳 이상 정상 Course
+         *
+         * ONLY_ONE_CANDIDATE
+         * → Course 후보 자체가 1곳
+         *
+         * WALKING_LIMIT
+         * → 여러 후보는 있지만 최대 도보 시간 때문에 1곳
+         *
+         * DURATION_LIMIT
+         * → 여러 후보는 있지만 여행 가능 시간 때문에 1곳
+         *
+         * MULTIPLE_CONSTRAINTS
+         * → 여행 시간과 도보 조건이 함께 영향을 줌
+         */
+        routeSelectionReason,
 
         totalDistanceKm: Number(totalDistanceKm.toFixed(2)),
 

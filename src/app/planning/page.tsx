@@ -69,6 +69,12 @@ type SubmitFeedback = {
   type: "empty" | "error";
   title: string;
   description: string;
+  code?: TripErrorCode;
+};
+
+type CreateCourseOptions = {
+  actorIds?: number[];
+  actorNames?: string[];
 };
 
 function parseIds(value: string | null): number[] {
@@ -145,25 +151,14 @@ function PlanningContent() {
     setMaxWalkingMinutes(value);
   }
 
-  async function handleCreateCourse() {
+  async function handleCreateCourse(options?: CreateCourseOptions) {
     /**
      * 함수 레벨에서도 중복 요청을 방어한다.
-     *
-     * 버튼 disabled만으로도 대부분 막을 수 있지만
-     * 빠른 이벤트나 다른 호출 경로가 생길 경우를 대비한다.
      */
     if (isSubmitting) {
       return;
     }
 
-    /**
-     * contentIds가 하나 이상 있어야 함
-     * durationMinutes가 선택되어 있어야 함
-     *
-     * maxWalkingMinutes
-     * - undefined: 미선택
-     * - null: 제한 없음
-     */
     if (
       contentIds.length === 0 ||
       durationMinutes === null ||
@@ -172,9 +167,12 @@ function PlanningContent() {
       return;
     }
 
+    const requestActorIds = options?.actorIds ?? actorIds;
+    const requestActorNames = options?.actorNames ?? actorNames;
+
     const planningInput: PlanningInput = {
       contentIds,
-      actorIds,
+      actorIds: requestActorIds,
       durationMinutes,
       maxWalkingMinutes,
     };
@@ -208,6 +206,7 @@ function PlanningContent() {
             type: "empty",
             title: "현재 조건에 맞는 코스를 찾지 못했어요.",
             description: message,
+            code: result?.code,
           });
 
           return;
@@ -217,6 +216,7 @@ function PlanningContent() {
           type: "error",
           title: "코스를 생성하지 못했어요.",
           description: message,
+          code: result?.code,
         });
 
         return;
@@ -240,8 +240,8 @@ function PlanningContent() {
         title: contentTitle ?? "나의 여행 코스",
       });
 
-      if (actorNames.length > 0) {
-        params.set("actorNames", actorNames.join(","));
+      if (requestActorNames.length > 0) {
+        params.set("actorNames", requestActorNames.join(","));
       }
 
       router.push(`/course?${params.toString()}`);
@@ -257,10 +257,17 @@ function PlanningContent() {
     }
   }
 
-  /**
-   * 작품 정보 자체가 없다면
-   * Planning 페이지에 잘못 진입한 상태다.
-   */
+  function retryWithoutActorFilter() {
+    void handleCreateCourse({
+      actorIds: [],
+      actorNames: [],
+    });
+  }
+
+  function goBackToPlan() {
+    router.push("/plan");
+  }
+
   if (contentIds.length === 0) {
     return (
       <main className="fw-page">
@@ -269,7 +276,7 @@ function PlanningContent() {
           title="선택된 작품 정보가 없어요."
           description="코스를 만들 작품을 다시 선택해 주세요."
           actionLabel="다시 선택하기"
-          onAction={() => router.push("/plan")}
+          onAction={goBackToPlan}
         />
       </main>
     );
@@ -279,6 +286,9 @@ function PlanningContent() {
     durationMinutes !== null &&
     maxWalkingMinutes !== undefined &&
     !isSubmitting;
+
+  const canExpandActorScope =
+    submitFeedback?.type === "empty" && actorIds.length > 0;
 
   return (
     <main className="fw-page">
@@ -400,11 +410,40 @@ function PlanningContent() {
       </section>
 
       {submitFeedback?.type === "empty" && (
-        <StateFeedback
-          title={submitFeedback.title}
-          description={`${submitFeedback.description} 여행 시간이나 도보 조건을 바꿔 다시 만들어 보세요.`}
-          className="mt-6"
-        />
+        <div className="mt-6">
+          <StateFeedback
+            title={submitFeedback.title}
+            description={
+              canExpandActorScope
+                ? `${submitFeedback.description} 배우 조건을 빼고 선택한 작품 전체 촬영지로 범위를 넓히거나, 작품과 배우를 다시 선택할 수 있어요.`
+                : `${submitFeedback.description} 여행 조건을 바꾸거나 작품과 배우를 다시 선택해 보세요.`
+            }
+          />
+
+          <div className="mt-4 flex flex-col gap-2">
+            {canExpandActorScope && (
+              <button
+                type="button"
+                className="fw-primary-button"
+                disabled={isSubmitting}
+                onClick={retryWithoutActorFilter}
+              >
+                {isSubmitting
+                  ? "코스를 다시 만드는 중…"
+                  : "배우 조건 없이 작품 전체로 다시 만들기"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="fw-secondary-button"
+              disabled={isSubmitting}
+              onClick={goBackToPlan}
+            >
+              작품 / 배우 다시 선택하기
+            </button>
+          </div>
+        </div>
       )}
 
       {submitFeedback?.type === "error" && (
