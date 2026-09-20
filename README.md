@@ -8,18 +8,21 @@ FAVEWAY는 드라마·영화·배우를 기준으로 실제 촬영지를 탐색�
 일반적인 AI 여행 추천처럼 장소를 임의로 생성하지 않고,
 **DB에 저장된 실제 촬영지와 Actor → Scene → Place 관계를 기준으로 후보를 검증**합니다.
 
-초기 Course는 후보 Route를 빠르게 비교하기 위해 Haversine 기반 거리와 예상 도보 시간을 사용하고,
+초기 Course는 후보 Route를 빠르게 비교하기 위해
+Haversine 기반 거리와 예상 도보 시간을 사용하고,
 Course 화면에서는 TMAP 실제 보행 경로를 다시 조회해 거리와 시간을 갱신합니다.
 
 사용자는 완성된 Course에서 장소를 추가·삭제하거나 순서를 변경할 수 있습니다.
+
+AI Docent는 DB의 검증 정보를 기반으로 설명을 생성하도록
+서버 Context / Prompt / API 구조를 구현했으며,
+현재 Course 화면에서는 실제 OpenAI 호출 전에 Mock 기반 사용자 경험을 먼저 검증하고 있습니다.
 
 ---
 
 ## 핵심 기능
 
 ### 코스 만들기
-
-작품 또는 배우를 기준으로 여행 코스를 만들 수 있습니다.
 
 ```text
 HOME
@@ -38,32 +41,76 @@ Course 생성
 - 작품 미선택 시 해당 배우의 전체 출연 작품 사용
 - 여행 가능 시간: 3시간 / 4시간 / 5시간
 - 한 구간 최대 도보 시간: 10분 / 20분 / 30분 / 상관없음
-- 복수 작품(`contentIds`)과 복수 배우(`actorIds`) 지원
 - Haversine 기반 초기 Route 비교
 - Course 진입 후 TMAP 실제 보행 경로로 거리·시간 갱신
-- Course에서 장소 추가 / 삭제 / 순서 변경 가능
-- 변경된 Course를 `localStorage`에 저장하고 복원
-- 데이터가 부족해 1개 장소 Course가 생성된 경우 이유 안내
-- 사용자가 선택한 경우에만 배우 조건을 해제해 작품 전체 촬영지로 범위 확장
+- Course 장소 추가 / 삭제 / 순서 변경
+- `localStorage` 저장 / 복원
+- 1개 장소 Course 이유 안내
+- 사용자 선택 기반 배우 조건 해제
+
+---
 
 ### 촬영지 둘러보기
-
-코스를 만들지 않고 작품 또는 배우 기준으로 실제 촬영지를 탐색할 수 있습니다.
 
 - 작품 → 촬영지 조회
 - 작품 + 배우 → 관련 Scene 촬영지만 필터링
 - 배우 → 실제 등장 Scene의 촬영지 조회
 - 배우 + 작품 → 선택 작품 범위로 필터링
-- 동일한 `content_id + place_id` 관계는 한 번만 표시
+- 동일 `content_id + place_id` 중복 제거
 - 촬영지 목록과 Kakao Map 동기화
-- Marker ↔ 장소 카드 선택 상태 동기화
-- 장소 상세에서 작품, 장면, 등장 배우, 주소, 검증 정보, 출처 확인
+- Marker ↔ 장소 카드 동기화
+- 장소 상세에서 작품 / 장면 / 배우 / 주소 / 검증 정보 / 출처 확인
+
+---
+
+### AI Docent
+
+Course 화면에서 두 가지 Docent 경험을 제공합니다.
+
+```text
+Course Docent
+→ 전체 촬영지를 순서대로 연결한 이야기
+
+Place Docent
+→ 특정 촬영지의 장면 중심 이야기
+```
+
+현재 UI:
+
+```text
+[이 코스 이야기 듣기]
+
+[현장에서 도슨트 듣기]
+```
+
+현재 구현:
+
+- Course Docent 진입 UX
+- Place Docent 진입 UX
+- 공통 Docent Dialog
+- Loading
+- Success
+- Empty
+- Error
+- Retry
+- 모바일 Bottom Sheet
+- 실제 AI 연결용 Place / Course API
+- DB 기반 Docent Context
+- Prompt Guardrail
+- Structured Output
+- 최소 근거 부족 시 생성 제한
+
+현재 Course UI는 실제 OpenAI API 대신 Mock 데이터를 사용합니다.
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+상태로 실제 호출을 비활성화할 수 있습니다.
 
 ---
 
 ## 핵심 데이터 관계
-
-배우가 작품에 출연했다는 사실만으로 작품의 모든 촬영지를 배우 관련 장소로 판단하지 않습니다.
 
 ```text
 Actor
@@ -87,23 +134,23 @@ scene_places
 places
 ```
 
-복수 배우 선택 시 **선택 배우 중 한 명 이상이 등장한 Scene의 합집합**을 사용합니다.
+복수 배우 선택 시
+선택 배우 중 한 명 이상이 등장한 Scene의 합집합을 사용합니다.
 
-FAVEWAY의 핵심 원칙은 다음과 같습니다.
+핵심 원칙:
 
-- 촬영지는 DB에 저장된 검증 데이터만 사용
-- AI가 촬영지를 임의로 생성하지 않음
-- 장면 정보가 없는 경우 없는 사실을 만들어내지 않음
-- 동일 작품 + 동일 장소는 중복 제거
+- 촬영지는 DB에 저장된 실제 데이터만 사용
+- AI가 촬영지를 임의 생성하지 않음
+- 장면 정보가 없으면 만들어내지 않음
+- 동일 작품 + 동일 장소 중복 제거
 - Actor → Scene → Place 관계를 추천 근거로 사용
-- 데이터 부족 시 일반 관광지를 자동으로 추가하지 않음
+- 데이터 부족 시 일반 관광지를 자동 추가하지 않음
 - 배우 조건 확장은 사용자가 직접 선택한 경우에만 수행
+- AI 입력은 Client 문자열이 아니라 Server DB Context를 사용
 
 ---
 
 ## Course 생성 방식
-
-현재 Course 후보 생성과 기본 경로 선택은 규칙 기반 Recommendation을 사용합니다.
 
 ```text
 Content / Actor Selection
@@ -135,36 +182,89 @@ TMAP Actual Walking Route
 Course Summary / Kakao Polyline 갱신
 ```
 
-기본 체류 시간은 장소당 최소 45분을 기준으로 계산합니다.
-
-여행 가능 시간에 따라 최대 방문 장소 수를 제한합니다.
+최대 방문 장소 수:
 
 - 3시간 → 최대 2곳
 - 4시간 → 최대 3곳
 - 5시간 → 최대 4곳
 
-초기 Course 생성 단계에서는
-여러 Route 조합을 빠르게 비교하기 위해 Haversine 기반 거리를 사용합니다.
+TMAP 실패 구간은
+Haversine 기반 거리와 예상 도보 시간으로 fallback 합니다.
 
-Course 화면에 진입한 뒤에는
-Course 전체 장소를 서버에 한 번 전달하고,
-Next.js Route Handler가 인접 장소별 TMAP 보행 경로를 조회합니다.
+---
 
-TMAP 조회 결과의 실제 거리·시간·path는
-Course Summary와 Kakao Polyline에 반영됩니다.
+## AI Docent 데이터 흐름
 
-TMAP 조회에 실패한 구간은
-Haversine 기반 거리와 예상 도보 시간을 사용해 fallback 처리합니다.
+```text
+Frontend
+↓
+contentId / placeId / order
+↓
+Next.js Route Handler
+↓
+Supabase
+↓
+Content
+Place
+Scene
+Actor
+Verified Evidence
+↓
+Prompt
+↓
+OpenAI
+↓
+Structured Docent Response
+```
 
-Kakao Map은 지도 Marker / Polyline UI를 담당하고,
-TMAP은 실제 보행 경로를 담당합니다.
+AI에 사용하는 verified_fact는
+검증 상태를 통과한 데이터로 제한합니다.
+
+현재 허용 상태:
+
+```text
+verified
+approved
+confirmed
+complete
+completed
+```
+
+Place Docent는:
+
+```text
+Scene Description
+또는
+Verified Fact
+```
+
+중 하나 이상이 있어야 생성 가능합니다.
+
+---
+
+## AI Docent Guardrail
+
+AI가 생성하지 않도록 제한하는 정보:
+
+- DB에 없는 촬영지
+- DB에 없는 Scene
+- Episode 추측
+- Actor 추측
+- 실제 대사
+- 촬영 상황
+- 시설
+- 내부 공간
+- 촬영 구도
+- 출입 가능 여부
+- 운영 시간
+- 촬영 허가
+
+실제 배우가 직접 말하는 것처럼
+1인칭으로 사칭하는 표현도 제한합니다.
 
 ---
 
 ## 데이터 부족 Fallback
-
-FAVEWAY는 촬영지가 부족하다는 이유로
-없는 장소나 장면을 만들어내지 않습니다.
 
 ```text
 촬영지 0개
@@ -177,8 +277,7 @@ FAVEWAY는 촬영지가 부족하다는 이유로
 → 정상 Route 탐색
 ```
 
-1개 장소 Course가 생성되면
-서버가 다음과 같은 이유를 구분해 반환합니다.
+1개 장소 Course 이유:
 
 ```text
 ONLY_ONE_CANDIDATE
@@ -187,21 +286,17 @@ DURATION_LIMIT
 MULTIPLE_CONSTRAINTS
 ```
 
-Course 화면에서는 이 값을 기준으로
-왜 현재 결과가 1곳인지 설명합니다.
+배우 조건으로 후보가 부족해도
+자동으로 작품 전체 범위로 확장하지 않습니다.
 
-배우 조건으로 후보가 부족한 경우에는
-자동으로 작품 전체 촬영지까지 확장하지 않습니다.
-
-사용자가:
+사용자가 직접 선택한 경우에만:
 
 ```text
-배우 조건 없이 작품 전체로 넓혀보기
+actorIds
+→ []
 ```
 
-를 직접 선택한 경우에만
-작품, 여행 시간, 도보 조건은 유지하고
-`actorIds`만 빈 배열로 바꿔 Course를 다시 생성합니다.
+로 다시 Course를 생성합니다.
 
 자세한 정책은 [`docs/data-fallback-policy.md`](docs/data-fallback-policy.md)를 참고하세요.
 
@@ -209,11 +304,22 @@ Course 화면에서는 이 값을 기준으로
 
 ## 주요 API
 
+### Content / Actor
+
 - `GET /api/contents`
 - `GET /api/actors/:actorId/places`
 - `GET /api/contents/:contentId/places`
+- `GET /api/contents/:contentId/places/:placeId`
+
+### Course
+
 - `POST /api/trips`
 - `POST /api/routes/walking`
+
+### AI Docent
+
+- `POST /api/docents/place`
+- `POST /api/docents/course`
 
 자세한 API는 [`docs/api.md`](docs/api.md)를 참고하세요.
 
@@ -240,6 +346,14 @@ Course 화면에서는 이 값을 기준으로
 - TMAP Pedestrian API
 - Haversine Distance Fallback
 
+### AI
+
+- OpenAI SDK
+- OpenAI Responses API
+- Structured Output
+- DB Grounded Docent Context
+- Mock-first AI Docent UX
+
 ### Recommendation
 
 - Actor → Scene → Place Filtering
@@ -254,7 +368,7 @@ Course 화면에서는 이 값을 기준으로
 
 - `localStorage`
 - Course 장소 추가 / 삭제 / 순서 저장
-- 외부 경로 데이터는 저장하지 않고 필요 시 재조회
+- 외부 Route 및 AI 결과는 저장하지 않고 필요 시 재생성
 
 ---
 
@@ -272,18 +386,30 @@ src/
 │     ├─ contents/
 │     ├─ actors/
 │     ├─ trips/
-│     └─ routes/
-│        └─ walking/
+│     ├─ routes/
+│     │  └─ walking/
+│     └─ docents/
+│        ├─ place/
+│        └─ course/
+│
 ├─ components/
 │  ├─ common/
 │  ├─ map/
+│  ├─ docent/
+│  │  └─ DocentDialog.tsx
 │  └─ PlaceDetailDialog.tsx
+│
 └─ lib/
    ├─ supabase/
-   └─ recommendation/
+   ├─ recommendation/
+   └─ ai/
+      ├─ openai.ts
+      ├─ docent-context.ts
+      ├─ docent-types.ts
+      ├─ docent-prompts.ts
+      ├─ generate-docent.ts
+      └─ docent-mock.ts
 ```
-
-세부 구조와 설계는 [`docs/architecture.md`](docs/architecture.md)를 참고하세요.
 
 ---
 
@@ -291,23 +417,26 @@ src/
 
 - [x] 작품 / 배우 기반 촬영지 탐색
 - [x] Actor → Scene → Place 관계 기반 필터링
-- [x] 여행 시간 / 최대 도보 시간 조건 기반 Course 생성
+- [x] 여행 시간 / 최대 도보 시간 기반 Course 생성
 - [x] 1개 장소 Course 및 이유 안내
-- [x] 사용자 선택 기반 배우 조건 해제 / 작품 범위 확장
-- [x] Kakao Map 지도 및 Marker / Polyline 동기화
-- [x] TMAP 실제 도보 경로 연동
+- [x] 사용자 선택 기반 배우 조건 해제
+- [x] Kakao Map Marker / Polyline 동기화
+- [x] TMAP 실제 도보 경로
 - [x] TMAP 실패 구간 Haversine fallback
 - [x] Course 장소 추가 / 삭제 / 순서 변경
-- [x] Course 상태 `localStorage` 저장 / 복원
-- [x] 장소 상세의 Scene / Episode / Actor / 검증 정보 표시
-- [x] Explore / Planning / Course Loading / Empty / Error / Retry 정리
-- [ ] 촬영지 상세 UX 고도화
+- [x] Course `localStorage` 저장 / 복원
+- [x] 장소 상세 Scene / Episode / Actor / 검증 정보
+- [x] Explore / Planning / Course Loading / Empty / Error / Retry
+- [x] AI Docent 서버 기반 구조
+- [x] Place / Course Docent API
+- [x] AI Docent Prompt / Context / Structured Output
+- [x] Course / Place Docent Mock UX
+- [x] AI Docent Mock Loading / Empty / Error / Retry
+- [ ] 실제 OpenAI API와 Course UI 연결
+- [ ] TTS
 - [ ] 데이터 확장 및 정제
 - [ ] AI Course Ranking
-- [ ] AI Docent
 - [ ] 사용자 계정 / 서버 기반 코스 저장
-
-전체 로드맵은 [`docs/roadmap.md`](docs/roadmap.md)를 참고하세요.
 
 ---
 
@@ -318,7 +447,7 @@ src/
 - Node.js 22 이상
 - npm
 
-프로젝트 설치:
+설치:
 
 ```bash
 git clone https://github.com/inseoKang/faveway.git
@@ -335,7 +464,14 @@ SUPABASE_SECRET_KEY=
 
 NEXT_PUBLIC_KAKAO_MAP_APP_KEY=
 TMAP_APP_KEY=
+
+OPENAI_API_KEY=
+OPENAI_DOCENT_MODEL=gpt-5.6-luna
+ENABLE_OPENAI_DOCENT=false
 ```
+
+현재 AI Docent UI는 Mock 데이터를 사용하므로
+`ENABLE_OPENAI_DOCENT=false` 상태에서도 개발할 수 있습니다.
 
 실행:
 
@@ -349,9 +485,6 @@ npm run dev
 npm run lint
 npm run build
 ```
-
-다른 PC에서 작업을 이어갈 때는 `package-lock.json`을 기준으로 설치하기 위해
-가능하면 `npm install`보다 `npm ci` 사용을 권장합니다.
 
 ---
 
@@ -375,5 +508,5 @@ FAVEWAY의 핵심은 AI가 많은 장소를 만들어내는 것이 아니라,
 
 입니다.
 
-AI 기능은 이 검증된 데이터와 사용자 흐름 위에서 동작하며,
-촬영지 자체를 임의로 생성하지 않습니다.
+AI는 검증된 데이터 위에서 설명과 개인화를 제공하며,
+촬영지와 장면 자체를 사실 데이터로 생성하지 않습니다.

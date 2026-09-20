@@ -19,8 +19,8 @@ AI
 DB의 실제 장소
 ```
 
-AI는 향후 검증된 장소를 기반으로
-개인화와 설명을 제공하는 역할로 제한합니다.
+AI는 검증된 DB 정보를 바탕으로
+설명과 개인화를 제공하는 역할로 제한합니다.
 
 ---
 
@@ -34,16 +34,26 @@ Next.js Frontend
 Next.js Route Handler
 ├─ Supabase Query
 ├─ Trip Recommendation
-└─ TMAP Proxy
+├─ TMAP Proxy
+└─ AI Docent
+   ├─ DB Context 구성
+   └─ OpenAI 호출
 ↓
 External Services
 ├─ Supabase PostgreSQL
 ├─ Kakao Maps JavaScript SDK
-└─ TMAP Pedestrian API
+├─ TMAP Pedestrian API
+└─ OpenAI API
 ```
 
 별도의 Backend 서버를 두지 않고
 Next.js Route Handler를 API 계층으로 사용합니다.
+
+현재 Course 화면의 AI Docent UX는
+실제 OpenAI API가 아닌 Mock 데이터를 사용합니다.
+
+실제 OpenAI 호출 구조는 구현되어 있으나
+환경변수로 비활성화할 수 있습니다.
 
 ---
 
@@ -81,8 +91,6 @@ Verification Data
 
 **지도 UI**
 
-Kakao Map은 실제 보행 거리 계산을 담당하지 않습니다.
-
 ---
 
 ## TMAP
@@ -107,8 +115,36 @@ Kakao Map은 실제 보행 거리 계산을 담당하지 않습니다.
 - 초기 Course 후보 Route 비교
 - TMAP 실패 구간 fallback
 
-Haversine은 현재 실제 Course 화면의 최종 경로 계산 수단이 아니라
-빠른 초기 계산과 외부 API 실패 대응용으로 사용합니다.
+---
+
+## OpenAI
+
+역할:
+
+```text
+Verified DB Context
+↓
+LLM
+↓
+AI Docent narration
+```
+
+OpenAI는 다음을 담당하지 않습니다.
+
+```text
+촬영지 생성
+Scene 생성
+Episode 추측
+출처 생성
+```
+
+현재 실제 OpenAI 호출은:
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+상태로 비활성화할 수 있습니다.
 
 ---
 
@@ -136,7 +172,19 @@ POST /api/routes/walking
 실제 TMAP Route
 ↓
 Course 확인 / 편집
+↓
+AI Docent Mock UX
 ```
+
+Course 화면에서는:
+
+```text
+이 코스 이야기 듣기
++
+현장에서 도슨트 듣기
+```
+
+두 가지 Docent 진입점을 제공합니다.
 
 ---
 
@@ -159,8 +207,6 @@ PlaceDetailDialog
 ---
 
 # 5. 작품 기준 데이터 흐름
-
-작품과 배우의 기본 관계:
 
 ```text
 Content
@@ -187,9 +233,6 @@ scene_places
 Places
 ```
 
-관계를 사용해
-선택 배우가 실제 등장한 Scene과 연결된 장소만 남깁니다.
-
 ---
 
 # 6. 배우 기준 데이터 흐름
@@ -202,10 +245,7 @@ content_actors
 Contents
 ```
 
-작품을 선택하지 않으면
-해당 배우의 전체 관련 작품을 사용합니다.
-
-촬영지 조회는:
+촬영지 조회:
 
 ```text
 Actor
@@ -218,8 +258,6 @@ scene_places
 ↓
 Places
 ```
-
-관계를 사용합니다.
 
 핵심 원칙:
 
@@ -259,9 +297,6 @@ Distance Optimization
 Initial Course
 ```
 
-초기 Route 조합 탐색에서는
-다수의 Route를 비교해야 하므로 Haversine을 사용합니다.
-
 Course 화면에서는:
 
 ```text
@@ -276,8 +311,6 @@ Actual Walking Route
 Course Summary 갱신
 ```
 
-구조로 실제 이동 데이터를 다시 반영합니다.
-
 ---
 
 # 8. Walking Route Layer
@@ -290,7 +323,7 @@ Course Stops
 POST /api/routes/walking
 ```
 
-Server에서는:
+Server:
 
 ```text
 A → B
@@ -298,25 +331,11 @@ B → C
 C → D
 ```
 
-형태로 인접 구간을 분리한 뒤
-각 구간별로 TMAP을 호출합니다.
-
-결과:
-
-```text
-distance
-duration
-path
-success
-```
-
-을 segment 단위로 통합해 반환합니다.
+형태로 인접 구간을 분리해 TMAP을 호출합니다.
 
 ---
 
 # 9. Route Partial Failure
-
-TMAP 실패를 Course 전체 실패로 취급하지 않습니다.
 
 ```text
 TMAP 성공 구간
@@ -326,27 +345,13 @@ TMAP 실패 구간
 → Haversine fallback
 ```
 
-상태는:
+상태:
 
 ```text
 real
 partial
 fallback
 ```
-
-으로 구분합니다.
-
-### real
-
-모든 구간이 TMAP 실제 경로입니다.
-
-### partial
-
-일부 구간만 Haversine fallback입니다.
-
-### fallback
-
-전체 구간이 Haversine fallback입니다.
 
 ---
 
@@ -361,16 +366,17 @@ Frontend는 다음 역할을 담당합니다.
 - API 요청
 - Course 결과 표시
 - 장소 상세 Dialog
-- Course 장소 추가
-- Course 장소 삭제
-- Course 장소 순서 변경
+- Course 장소 추가 / 삭제 / 순서 변경
 - Course Summary 갱신
 - localStorage 저장 / 복원
 - TMAP Route 재조회
 - Kakao Marker / Polyline 동기화
 - Loading / Empty / Error / Retry 상태 처리
 - 부분 실패 Warning 처리
-- 이전 페이지 Navigation
+- AI Docent Mock UX
+- Course Docent Dialog
+- Place Docent Dialog
+- AI Docent Loading / Empty / Error / Retry Mock 상태
 
 ---
 
@@ -389,18 +395,22 @@ Next.js Route Handler는 다음 역할을 담당합니다.
 - 인접 구간 Route 처리
 - segment 결과 통합
 - 구간별 실패 상태 반환
+- AI Docent Context 조회
+- 검증된 evidence 필터링
+- OpenAI API Key 보호
+- OpenAI 호출 여부 제어
 
 ---
 
 # 12. Course 상태 구조
 
-Course의 장소 목록을 핵심 상태로 사용합니다.
+핵심 상태:
 
 ```text
 Course Stops
 ```
 
-사용자가 직접 변경하는 대상:
+사용자 변경:
 
 ```text
 장소 추가
@@ -408,7 +418,7 @@ Course Stops
 장소 순서 변경
 ```
 
-이 상태가 변경되면 다음 데이터가 다시 계산됩니다.
+변경 시:
 
 ```text
 Course Stops
@@ -426,16 +436,17 @@ stay time
 Course Summary
 ↓
 Kakao Marker / Polyline
+↓
+Docent Stop Order
 ```
+
+까지 갱신됩니다.
 
 ---
 
 # 13. Persistence
 
-사용자가 직접 변경한 Course 상태는
-브라우저 localStorage에 저장합니다.
-
-저장 대상:
+localStorage 저장 대상:
 
 ```text
 Course Stops
@@ -449,109 +460,234 @@ Course Stops
 ```text
 TMAP Route
 TMAP Path
+AI Docent 결과
 ```
-
-외부 API에서 다시 얻을 수 있는 데이터는
-Course 복원 후 재조회합니다.
 
 ---
 
 # 14. 상태 처리 구조
 
-현재 공통 상태 처리 기준:
+공통 상태 처리:
 
 ```text
 StateFeedback
 InlineWarning
 ```
 
-## StateFeedback
-
-주로 다음 상태에 사용합니다.
-
-- Loading
-- Empty
-- Error
-- Retry
-
-## InlineWarning
-
-핵심 기능을 막지 않는 부분 실패에 사용합니다.
-
-예:
+AI Docent Mock UX:
 
 ```text
-TMAP 일부 실패
-TMAP 전체 fallback
-localStorage 저장 실패
+Loading
+Success
+Empty
+Error
+Retry
 ```
 
 ---
 
-# 15. 현재 상태 처리 범위
+# 15. AI Docent Context Layer
 
-완료:
+Client는 설명 문자열이 아니라 식별자만 전달합니다.
 
 ```text
-Explore
-ExploreMap
-CourseMap
+Client
+↓
+contentId
+placeId
+order
+```
+
+Server:
+
+```text
+IDs
+↓
+Supabase 재조회
+↓
+Content
+Place
+Scene
+Scene Actor
+Verified Evidence
+↓
+Docent Context
+```
+
+---
+
+# 16. AI Docent Evidence
+
+AI에 전달하는 verified_fact는
+검증 상태를 통과한 데이터로 제한합니다.
+
+현재 허용 상태:
+
+```text
+verified
+approved
+confirmed
+complete
+completed
+```
+
+---
+
+# 17. AI Docent 최소 근거
+
+Place Docent를 생성하려면 다음 중 하나 이상이 필요합니다.
+
+```text
+Scene Description
+또는
+Verified Fact
+```
+
+둘 다 없다면:
+
+```text
+DOCENT_CONTEXT_INSUFFICIENT
+```
+
+를 반환합니다.
+
+---
+
+# 18. AI Docent 생성 구조
+
+```text
+Frontend
+↓
+POST /api/docents/place
+또는
+POST /api/docents/course
+↓
+Next.js Route Handler
+↓
+Supabase
+↓
+Docent Context
+↓
+Prompt
+↓
+OpenAI Responses API
+↓
+Structured Output
+↓
+Docent Response
+```
+
+---
+
+# 19. AI Docent Prompt 정책
+
+AI는 다음을 임의 생성하지 않습니다.
+
+```text
+촬영지
+Scene
+Episode
+Actor
+대사
+촬영 사실
+시설
+내부 공간
+촬영 구도
+출입 가능 여부
+운영 시간
+촬영 허가
+```
+
+실제 배우처럼 1인칭으로 사칭하지 않습니다.
+
+---
+
+# 20. 실제 OpenAI 호출 제어
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+비활성 상태에서는:
+
+```text
+POST /api/docents/place
+POST /api/docents/course
+```
+
+요청이 OpenAI까지 전달되지 않습니다.
+
+실제 연결 시:
+
+```env
+ENABLE_OPENAI_DOCENT=true
+```
+
+로 변경합니다.
+
+---
+
+# 21. 현재 AI Docent UI 구조
+
+```text
 Course
+├─ 이 코스 이야기 듣기
+│  └─ Course Docent
+│
+└─ 각 Stop
+   └─ 현장에서 도슨트 듣기
+      └─ Place Docent
 ```
 
-다음 정리 대상:
+현재 데이터 소스:
 
 ```text
-Planning
+DocentDialog
+↓
+docent-mock.ts
 ```
+
+실제 연결 시:
+
+```text
+Mock
+↓
+POST /api/docents/place
+POST /api/docents/course
+```
+
+로 교체할 예정입니다.
 
 ---
 
-# 16. AI 적용 방향
+# 22. TTS
 
-AI는 Candidate 생성자가 아닙니다.
+현재 TTS는 구현하지 않았습니다.
 
-향후 구조:
+```text
+음성으로 듣기 · 준비 중
+```
+
+상태만 표시합니다.
+
+---
+
+# 23. AI 적용 원칙
+
+Recommendation:
 
 ```text
 Validated DB Candidate
 ↓
-User Preference
-↓
-Ranking / Explanation
-↓
-Structured Output
-↓
-Candidate ID Validation
-↓
-Final Result
+AI Ranking
 ```
 
-AI가 DB에 존재하지 않는 촬영지를 반환하더라도
-실제 Candidate로 사용하지 않습니다.
-
----
-
-# 17. AI Docent 구조
-
-향후 AI Docent:
+Docent:
 
 ```text
-Verified DB Data
-+
-Content
-+
-Scene
-+
-Actor
-+
-Place
-+
-User Preference
+Verified DB Context
 ↓
-LLM
-↓
-Docent
+AI Explanation
 ```
 
 AI가 맡는 역할:
