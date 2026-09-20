@@ -37,10 +37,13 @@ type Detail = {
 type VerificationTone = "verified" | "partial" | "pending";
 
 function safeSourceUrl(value: string | null) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   try {
     const url = new URL(value);
+
     return ["https:", "http:"].includes(url.protocol) ? url.href : null;
   } catch {
     return null;
@@ -50,18 +53,27 @@ function safeSourceUrl(value: string | null) {
 function formatEpisode(value: string | null) {
   const episode = value?.trim();
 
-  if (!episode) return "회차 정보 없음";
-  if (/회$|화$/.test(episode) || /episode/i.test(episode)) return episode;
+  if (!episode) {
+    return "회차 정보 없음";
+  }
+
+  if (/회$|화$/.test(episode) || /episode/i.test(episode)) {
+    return episode;
+  }
 
   return `${episode}회`;
 }
 
 function formatVerifiedAt(value: string | null) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
 
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -81,13 +93,19 @@ function getVerificationMeta(status: string): {
       normalized,
     )
   ) {
-    return { label: "검증 완료", tone: "verified" };
+    return {
+      label: "검증 완료",
+      tone: "verified",
+    };
   }
 
   if (
     ["partial", "partially_verified", "partially-verified"].includes(normalized)
   ) {
-    return { label: "부분 검증", tone: "partial" };
+    return {
+      label: "부분 검증",
+      tone: "partial",
+    };
   }
 
   return {
@@ -103,6 +121,7 @@ function sourceTypeLabel(value: string) {
     BLOG: "블로그 자료",
     PUBLIC_DATA: "공공데이터",
   };
+
   return labels[value.trim().toUpperCase()] ?? "참고 자료";
 }
 
@@ -116,6 +135,14 @@ function verificationBadgeClass(tone: VerificationTone) {
   }
 
   return "border-gray-200 bg-gray-50 text-gray-600";
+}
+
+function hasMeaningfulSource(source: Detail["sources"][number]) {
+  const hasVerifiedFact = Boolean(source.verified_fact?.trim());
+  const hasValidUrl = Boolean(safeSourceUrl(source.source_url));
+  const hasVerifiedAt = Boolean(source.verified_at?.trim());
+
+  return hasVerifiedFact || hasValidUrl || hasVerifiedAt;
 }
 
 export default function PlaceDetailDialog({
@@ -159,13 +186,17 @@ export default function PlaceDetailDialog({
 
         const response = await fetch(
           `/api/contents/${contentId}/places/${placeId}`,
-          { signal: controller.signal },
+          {
+            signal: controller.signal,
+          },
         );
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.message ?? "장소 정보를 불러오지 못했습니다.");
+          throw new Error(
+            result.message ?? "장소 정보를 불러오지 못했습니다.",
+          );
         }
 
         if (!controller.signal.aborted) {
@@ -198,35 +229,42 @@ export default function PlaceDetailDialog({
           )}`
         : null;
 
-  const verifiedDescriptions = useMemo(() => {
-    if (!data) return [];
+  const displaySources = useMemo(() => {
+    if (!data) {
+      return [];
+    }
 
-    return Array.from(
-      new Set(
-        data.sources
-          .map((source) => source.verified_fact?.trim())
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
+    return data.sources.filter(hasMeaningfulSource);
   }, [data]);
 
   const sourceSummary = useMemo(() => {
-    if (!data || data.sources.length === 0) return null;
+    if (displaySources.length === 0) {
+      return null;
+    }
 
-    const metas = data.sources.map((source) =>
+    const metas = displaySources.map((source) =>
       getVerificationMeta(source.verification_status),
     );
 
     if (metas.some((meta) => meta.tone === "verified")) {
-      return { label: "검증 완료", tone: "verified" as const };
+      return {
+        label: "검증 완료",
+        tone: "verified" as const,
+      };
     }
 
     if (metas.some((meta) => meta.tone === "partial")) {
-      return { label: "부분 검증", tone: "partial" as const };
+      return {
+        label: "부분 검증",
+        tone: "partial" as const,
+      };
     }
 
-    return { label: "출처 확인 필요", tone: "pending" as const };
-  }, [data]);
+    return {
+      label: "출처 확인 필요",
+      tone: "pending" as const,
+    };
+  }, [displaySources]);
 
   return (
     <dialog
@@ -237,7 +275,9 @@ export default function PlaceDetailDialog({
         onClose();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
       }}
       className="fw-dialog"
     >
@@ -261,9 +301,7 @@ export default function PlaceDetailDialog({
         <div className="fw-dialog-body">
           <section>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold text-muted-foreground">
-                LOCATION
-              </p>
+              {data && <span className="fw-badge">{data.content.title}</span>}
 
               {sourceSummary && (
                 <span
@@ -278,14 +316,14 @@ export default function PlaceDetailDialog({
 
             <h2
               id="place-detail-title"
-              className="mt-2 text-2xl font-bold leading-snug"
+              className="mt-4 text-[28px] font-bold leading-tight tracking-[-0.04em]"
             >
               {data?.place.name || placeName}
             </h2>
 
-            {data && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                {data.content.title} 촬영지
+            {data?.place.address && (
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                {data.place.address}
               </p>
             )}
           </section>
@@ -295,6 +333,7 @@ export default function PlaceDetailDialog({
               <p className="text-sm font-medium">
                 장소 정보를 불러오고 있어요.
               </p>
+
               <p className="mt-1 text-xs text-muted-foreground">
                 작품, 장면, 배우와 출처 정보를 확인하고 있습니다.
               </p>
@@ -306,6 +345,7 @@ export default function PlaceDetailDialog({
               <p className="text-sm font-semibold text-red-700">
                 장소 정보를 불러오지 못했어요.
               </p>
+
               <p className="mt-1 text-sm text-red-600">{error}</p>
 
               <button
@@ -326,82 +366,46 @@ export default function PlaceDetailDialog({
             <>
               <section>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  01 · 작품과 배우
+                  01 / 어떤 장면인가요?
                 </p>
 
-                <div className="mt-3 rounded-2xl border border-gray-200 bg-white p-4">
-                  <p className="text-xs text-muted-foreground">작품</p>
-                  <h3 className="mt-1 text-xl font-bold">
-                    {data.content.title}
-                  </h3>
-
-                  <div className="mt-4 border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      관련 배우
-                    </p>
-
-                    {data.actors.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {data.actors.map((actor) => (
-                          <span key={actor.id} className="fw-badge">
-                            {actor.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        아직 연결된 배우 정보가 없습니다.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              <section>
-                <div className="flex items-end justify-between gap-4">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    02 · 촬영 장면
-                  </p>
-
-                  {data.scenes.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {data.scenes.length}개 장면
-                    </p>
-                  )}
-                </div>
-
-                <div className="mt-4 space-y-3">
+                <div className="mt-5 space-y-7">
                   {data.scenes.length > 0 ? (
                     data.scenes.map((scene) => (
-                      <article key={scene.id} className="fw-scene-card">
+                      <article key={scene.id}>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-primary shadow-sm">
+                          <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-primary">
                             {formatEpisode(scene.episode)}
                           </span>
 
-                          {scene.actors.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {scene.actors
-                                .map((actor) => actor.name)
-                                .join(" · ")}
+                          {scene.actors.map((actor) => (
+                            <span key={actor.id} className="fw-badge">
+                              {actor.name}
                             </span>
-                          )}
+                          ))}
                         </div>
 
-                        <p className="mt-3 whitespace-pre-line text-sm leading-7">
+                        <p className="mt-4 whitespace-pre-line text-[15px] leading-7 text-foreground">
                           {scene.description?.trim() ||
                             "이 장면의 설명은 아직 등록되지 않았습니다."}
                         </p>
+
+                        {scene.actors.length === 0 && (
+                          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                            이 장면과 연결된 배우 정보는 아직 등록되지 않았습니다.
+                          </p>
+                        )}
                       </article>
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4">
                       <p className="text-sm font-medium">
-                        등록된 장면 정보가 없어요.
+                        구체적인 장면 정보가 아직 등록되지 않았어요.
                       </p>
+
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        이 작품과 연결된 장소입니다. 회차와 장면 설명은 아직
-                        준비되지 않았습니다.
+                        이 작품과 장소의 연결 근거는 확인할 수 있지만, 회차와
+                        장면 설명은 아직 준비되지 않았습니다.
                       </p>
                     </div>
                   )}
@@ -410,118 +414,122 @@ export default function PlaceDetailDialog({
 
               <section>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  03 · 검증된 장소 정보
+                  02 / 이곳은 어떤 곳인가요?
                 </p>
 
-                {verifiedDescriptions.length > 0 ? (
-                  <div className="mt-3 space-y-3">
-                    {verifiedDescriptions.map((description, index) => (
-                      <div
-                        key={`${description}-${index}`}
-                        className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4"
-                      >
-                        <p className="text-xs font-semibold text-emerald-700">
-                          검증된 정보
-                        </p>
-                        <p className="mt-2 whitespace-pre-line text-sm leading-7">
-                          {description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4">
-                    <p className="text-sm font-medium">
-                      추가로 정리된 검증 정보가 없어요.
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      촬영 장면은 위에서, 출처와 확인 상태는 아래에서 볼 수
-                      있습니다.
-                    </p>
-                  </div>
-                )}
+                <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-medium">
+                    장소 소개가 아직 준비되지 않았어요.
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    실제 장소 자체에 대한 설명은 추후 검증된 정보를 기반으로
+                    추가될 예정입니다.
+                  </p>
+                </div>
               </section>
+
+              {/*
+                추후 AI Docent 위치
+
+                Scene과 장소 소개를 먼저 보여준 뒤,
+                검증된 DB 정보를 기반으로 만든 AI Docent를 이 위치에 배치한다.
+
+                DB 검증 정보와 AI 생성 설명은 UI에서도 구분한다.
+              */}
 
               <section>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  04 · 실제 위치
+                  03 / 실제 위치
                 </p>
 
-                <div className="mt-3 rounded-2xl border border-gray-200 bg-white p-4">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    주소
-                  </p>
-                  <p className="mt-2 text-sm leading-7">
+                <div className="mt-5">
+                  <p className="text-base font-semibold leading-7">
                     {data.place.address || "주소 정보가 아직 없습니다."}
                   </p>
 
-                  {kakaoMapUrl && (
+                  {kakaoMapUrl ? (
                     <a
                       href={kakaoMapUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="fw-primary-button mt-4 inline-flex"
+                      className="fw-primary-button mt-5"
                     >
-                      카카오맵에서 위치 보기 ↗
+                      카카오맵에서 위치 보기
+                      <span aria-hidden="true">↗</span>
                     </a>
+                  ) : (
+                    <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                      현재 지도에서 확인할 수 있는 주소나 좌표가 없습니다.
+                    </p>
                   )}
                 </div>
               </section>
 
               <section>
-                <div className="flex items-end justify-between gap-4">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    05 · 출처와 확인 상태
-                  </p>
-
-                  {data.sources.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {data.sources.length}개 자료
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      이 장소의 연결 근거
                     </p>
+
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      작품과 촬영지의 연결을 확인한 자료입니다.
+                    </p>
+                  </div>
+
+                  {sourceSummary && (
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${verificationBadgeClass(
+                        sourceSummary.tone,
+                      )}`}
+                    >
+                      {sourceSummary.label}
+                    </span>
                   )}
                 </div>
 
-                {data.sources.length > 0 ? (
-                  <div className="mt-3 space-y-3">
-                    {data.sources.map((source, index) => {
+                {displaySources.length > 0 ? (
+                  <div className="mt-5 divide-y divide-gray-100">
+                    {displaySources.map((source, index) => {
                       const url = safeSourceUrl(source.source_url);
+
                       const meta = getVerificationMeta(
                         source.verification_status,
                       );
+
                       const verifiedAt = formatVerifiedAt(source.verified_at);
 
                       return (
                         <article
                           key={`${source.source_url ?? "source"}-${index}`}
-                          className="rounded-2xl border border-gray-200 bg-white p-4"
+                          className="py-5 first:pt-0 last:pb-0"
                         >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${verificationBadgeClass(
-                                  meta.tone,
-                                )}`}
-                              >
-                                {meta.label}
-                              </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${verificationBadgeClass(
+                                meta.tone,
+                              )}`}
+                            >
+                              {meta.label}
+                            </span>
 
-                              {source.source_type?.trim() && (
-                                <span className="text-xs text-muted-foreground">
-                                  {sourceTypeLabel(source.source_type)}
-                                </span>
-                              )}
-                            </div>
-
-                            {verifiedAt && (
+                            {source.source_type?.trim() && (
                               <span className="text-xs text-muted-foreground">
-                                확인 {verifiedAt}
+                                {sourceTypeLabel(source.source_type)}
                               </span>
                             )}
                           </div>
 
                           {source.verified_fact?.trim() && (
-                            <p className="mt-3 text-xs leading-6 text-muted-foreground">
+                            <p className="mt-3 whitespace-pre-line text-sm leading-7 text-foreground">
                               {source.verified_fact.trim()}
+                            </p>
+                          )}
+
+                          {verifiedAt && (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              마지막 확인 {verifiedAt}
                             </p>
                           )}
 
@@ -530,12 +538,13 @@ export default function PlaceDetailDialog({
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="mt-3 inline-flex min-h-10 items-center text-sm font-semibold text-primary underline underline-offset-4"
+                              className="mt-3 inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-primary underline underline-offset-4"
                             >
-                              출처 보기 ↗
+                              원문 출처 보기
+                              <span aria-hidden="true">↗</span>
                             </a>
                           ) : (
-                            <p className="mt-3 text-xs text-muted-foreground">
+                            <p className="mt-3 text-xs leading-5 text-muted-foreground">
                               연결된 외부 링크가 없습니다.
                             </p>
                           )}
@@ -544,13 +553,14 @@ export default function PlaceDetailDialog({
                     })}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4">
+                  <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4">
                     <p className="text-sm font-medium">
-                      연결된 출처 정보가 없어요.
+                      확인할 수 있는 연결 근거가 아직 없어요.
                     </p>
+
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      출처가 추가되기 전까지는 이 장소의 검증 상태를 확정해서
-                      표시하지 않습니다.
+                      촬영지와 작품의 연결을 확인할 수 있는 설명이나 출처가
+                      등록되면 이곳에 표시됩니다.
                     </p>
                   </div>
                 )}
