@@ -567,6 +567,79 @@
   font-size: 11px;
   line-height: 1.8;
 }
+.docentSection {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #c8d9ef;
+  border-radius: 20px;
+  background: #f2f7fd;
+}
+
+.docentSectionTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.docentSectionText {
+  min-width: 0;
+}
+
+.docentEyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--fw-primary);
+}
+
+.docentSection h2 {
+  margin-top: 5px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+}
+
+.docentSection p {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fw-muted);
+}
+
+.courseDocentButton {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--fw-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.courseDocentButton:hover {
+  background: #1159c2;
+}
+
+.placeDocentButton {
+  width: calc(100% - 24px);
+  min-height: 44px;
+  margin: 0 12px 10px;
+  padding: 9px 12px;
+  border: 1px solid #bbd3f5;
+  border-radius: 12px;
+  background: #f5f9ff;
+  color: var(--fw-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.placeDocentButton:hover {
+  background: #eaf3ff;
+}
 @media (min-width: 640px) {
   .shell {
     padding-top: 32px;

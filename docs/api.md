@@ -295,24 +295,6 @@ Haversine 기반 초기 거리 계산
 Course 반환
 ```
 
-배우가 선택된 경우에는
-배우가 작품에 출연했다는 사실만으로
-작품 전체 촬영지를 배우 관련 장소로 사용하지 않습니다.
-
-반드시 다음 관계를 사용합니다.
-
-```text
-Actor
-↓
-scene_actors
-↓
-Scene
-↓
-scene_places
-↓
-Place
-```
-
 장소별 최소 체류 시간:
 
 ```text
@@ -388,8 +370,6 @@ TMAP 실제 보행 경로를 다시 조회합니다.
 
 ## `candidateSource`
 
-후보 생성 범위를 나타냅니다.
-
 ```text
 ACTOR_SCENE
 → 배우가 등장한 Scene과 연결된 촬영지 기준
@@ -401,11 +381,6 @@ CONTENT
 ---
 
 ## `candidateCount`
-
-작품 / 배우 조건을 적용한 뒤
-좌표 검증까지 통과해 Course 계산에 사용할 수 있는 후보 장소 수입니다.
-
-즉 다음 단계까지 통과한 장소 수입니다.
 
 ```text
 작품 / 배우 조건
@@ -422,8 +397,6 @@ candidateCount
 ---
 
 ## `routeSelectionReason`
-
-최종 Course가 현재 장소 수로 선택된 이유를 나타냅니다.
 
 ### `NORMAL`
 
@@ -479,24 +452,13 @@ Frontend는 1개 장소 Course를 Error로 처리하지 않고
 배우 기준 후보가 부족한 경우
 애플리케이션이 자동으로 작품 전체 범위로 확장하지 않습니다.
 
-사용자가 다음 액션을 직접 선택한 경우에만 재요청합니다.
+사용자가 직접:
 
 ```text
 배우 조건 없이 작품 전체로 넓혀보기
 ```
 
-기존 요청:
-
-```json
-{
-  "contentIds": [1],
-  "actorIds": [3],
-  "durationMinutes": 180,
-  "maxWalkingMinutes": 10
-}
-```
-
-범위 확장 요청:
+를 선택한 경우에만 재요청합니다.
 
 ```json
 {
@@ -507,26 +469,8 @@ Frontend는 1개 장소 Course를 Error로 처리하지 않고
 }
 ```
 
-유지:
-
-```text
-contentIds
-durationMinutes
-maxWalkingMinutes
-```
-
-변경:
-
-```text
-actorIds
-→ []
-```
-
-즉 작품, 여행 가능 시간, 최대 도보 시간은 유지하고
+작품, 여행 가능 시간, 최대 도보 시간은 유지하고
 배우 필터만 제거합니다.
-
-사용자의 명시적인 선택 없이
-자동으로 배우 조건을 제거하지 않습니다.
 
 ---
 
@@ -541,23 +485,11 @@ Trip API는 가능한 경우 다음 형태로 오류를 반환합니다.
 }
 ```
 
----
-
 ## `INVALID_TRIP_CONDITIONS`
 
 HTTP `400`
 
 잘못된 작품 조건, 여행 시간 또는 최대 도보 시간이 전달된 경우입니다.
-
-예:
-
-```text
-contentIds 없음
-잘못된 durationMinutes
-지원하지 않는 maxWalkingMinutes
-```
-
----
 
 ## `NO_FILMING_LOCATIONS`
 
@@ -565,62 +497,17 @@ HTTP `404`
 
 선택 조건과 연결된 촬영지가 없는 경우입니다.
 
-배우가 선택된 경우에는
-`Actor → Scene → Place` 관계 기준으로 후보가 없다는 의미입니다.
-
-```text
-Actor
-↓
-Scene
-↓
-Place
-
-결과 없음
-```
-
-Frontend에서는 시스템 오류가 아니라
-데이터가 없는 Empty 상태로 처리합니다.
-
----
-
 ## `NO_COORDINATED_FILMING_LOCATIONS`
 
 HTTP `404`
 
-촬영지는 존재하지만
-Course 계산에 필요한 좌표가 등록된 장소가 없는 경우입니다.
-
-```text
-Place 존재
-+
-latitude / longitude 없음
-↓
-Course Candidate 없음
-```
-
-Place 자체가 잘못된 것은 아니므로
-Explore / Detail에서는 계속 사용할 수 있습니다.
-
----
+촬영지는 존재하지만 Course 계산에 필요한 좌표가 없는 경우입니다.
 
 ## `NO_AVAILABLE_ROUTE`
 
 HTTP `422`
 
-촬영지 후보는 존재하지만
 현재 여행 조건을 만족하는 Route를 만들 수 없는 경우입니다.
-
-예:
-
-```text
-여행 시간 부족
-도보 조건 불충족
-```
-
-Frontend에서는 조건 변경을 유도하는
-Empty 상태로 처리합니다.
-
----
 
 ## `TRIP_CANDIDATES_FETCH_FAILED`
 
@@ -628,19 +515,11 @@ HTTP `500`
 
 Supabase에서 Course 후보를 조회하지 못한 경우입니다.
 
-사용자 조건 문제가 아니라
-데이터 조회 실패이므로 Error로 처리합니다.
-
----
-
 ## `TRIP_CREATION_FAILED`
 
 HTTP `500`
 
-예상하지 못한 Course 생성 오류가 발생한 경우입니다.
-
-Frontend에서는 Error로 처리하고
-가능한 경우 Retry를 제공합니다.
+예상하지 못한 Course 생성 오류입니다.
 
 ---
 
@@ -650,12 +529,6 @@ Frontend에서는 Error로 처리하고
 
 Course 전체 장소 목록을 한 번에 전달하면
 서버에서 인접 장소별 TMAP 보행 경로를 조회합니다.
-
-Frontend가 각 구간별 API 요청을 직접 보내지 않습니다.
-
----
-
-## Request
 
 ```json
 {
@@ -676,20 +549,7 @@ Frontend가 각 구간별 API 요청을 직접 보내지 않습니다.
 }
 ```
 
----
-
-## Server 처리
-
-예:
-
-```text
-A
-B
-C
-D
-```
-
-요청 시:
+처리:
 
 ```text
 Client
@@ -702,46 +562,9 @@ A → B
 B → C
 C → D
 ↓
-각 구간 TMAP 조회
+TMAP 조회
 ↓
 결과 통합
-```
-
----
-
-## Response
-
-```json
-{
-  "data": {
-    "segments": [
-      {
-        "fromPlaceId": 1,
-        "toPlaceId": 2,
-        "distanceMeters": 850,
-        "durationSeconds": 720,
-        "path": [
-          {
-            "latitude": 37.123,
-            "longitude": 126.123
-          }
-        ],
-        "success": true
-      }
-    ]
-  }
-}
-```
-
-주요 필드:
-
-```text
-fromPlaceId
-toPlaceId
-distanceMeters
-durationSeconds
-path
-success
 ```
 
 ---
@@ -751,65 +574,279 @@ success
 한 구간의 TMAP 요청 실패가
 Course 전체 실패로 이어지지 않도록 구성합니다.
 
-예:
-
 ```text
-A → B
-TMAP 성공
+TMAP 성공 구간
+→ 실제 경로
 
-B → C
-TMAP 실패
-
-C → D
-TMAP 성공
+TMAP 실패 구간
+→ success: false
+→ Frontend Haversine fallback
 ```
 
-결과:
-
-```text
-A → B
-실제 TMAP 경로
-
-B → C
-success: false
-
-C → D
-실제 TMAP 경로
-```
-
-Frontend는 실패한 구간만
-Haversine 기반 거리와 예상 도보 시간으로 fallback 합니다.
+좌표가 없는 구간도 해당 segment만 실패 처리합니다.
 
 ---
 
-## 좌표가 없는 구간
+# 10. AI Docent
 
-장소 하나에 유효한 좌표가 없더라도
-Walking Route 요청 전체를 실패시키지 않습니다.
+AI Docent는
+DB에 존재하는 작품·장면·배우·장소·검증 정보를 기반으로
+현장에서 들을 수 있는 설명을 생성하기 위한 기능입니다.
 
-```text
-A → B
-정상 좌표
-→ TMAP
+AI가 촬영지나 장면 자체를 생성하지 않습니다.
 
-B → C
-C 좌표 없음
-→ 해당 segment만 실패
+현재 서버 기반 구조는 구현되어 있으며,
+Course 화면의 사용자 경험은 Mock 데이터로 먼저 검증하고 있습니다.
 
-C → D
-필요한 좌표가 유효한 경우
-→ TMAP
-```
-
-문제가 있는 구간만 `success: false`로 반환하고,
-정상 조회 가능한 다른 구간은 계속 TMAP을 사용합니다.
-
-이를 통해 한 장소의 좌표 문제 때문에
-정상 조회 가능한 다른 구간까지 fallback 되는 것을 방지합니다.
+실제 OpenAI 호출은 환경변수로 비활성화할 수 있습니다.
 
 ---
 
-# 10. Frontend 상태 처리 기준
+## `POST /api/docents/place`
+
+특정 작품과 장소에 대한 Place Docent를 생성합니다.
+
+### Request
+
+```json
+{
+  "contentId": 1,
+  "placeId": 10,
+  "language": "ko"
+}
+```
+
+지원 언어:
+
+```text
+ko
+en
+```
+
+Client는 Scene 설명이나 verified_fact를 직접 전달하지 않습니다.
+
+```text
+Client
+↓
+contentId + placeId
+↓
+Server
+↓
+Supabase 재조회
+↓
+Content
+Place
+Scene
+Actor
+verified_fact
+↓
+LLM
+```
+
+### Success Response
+
+```json
+{
+  "data": {
+    "type": "place",
+    "contentId": 1,
+    "placeId": 10,
+    "language": "ko",
+    "title": "장소의 이야기",
+    "narration": "AI Docent 설명",
+    "generatedFrom": {
+      "sceneIds": [1, 2],
+      "hasVerifiedFact": true
+    }
+  }
+}
+```
+
+---
+
+## `POST /api/docents/course`
+
+Course 전체 장소를 순서대로 연결한 Course Docent를 생성합니다.
+
+### Request
+
+```json
+{
+  "language": "ko",
+  "stops": [
+    {
+      "contentId": 1,
+      "placeId": 10,
+      "order": 1
+    },
+    {
+      "contentId": 1,
+      "placeId": 20,
+      "order": 2
+    }
+  ]
+}
+```
+
+Client가 전달하는 정보는 식별자와 방문 순서입니다.
+
+각 장소의 장면과 검증 정보는
+서버가 다시 DB에서 조회합니다.
+
+---
+
+# 11. AI Docent Context
+
+AI Docent Context는 다음 데이터를 기준으로 구성합니다.
+
+```text
+Content
++
+Place
++
+Scene
++
+Scene Actor
++
+Verified Evidence
+```
+
+Scene과 Actor는 다음 관계를 사용합니다.
+
+```text
+Place
+↓
+scene_places
+↓
+Scene
+↓
+scene_actors
+↓
+Actor
+```
+
+Scene은 요청된 `contentId` 범위로 다시 제한합니다.
+
+---
+
+# 12. verified_fact 사용 기준
+
+AI 근거 정보로 사용하는 `verified_fact`는
+검증 상태를 통과한 데이터로 제한합니다.
+
+현재 허용 상태:
+
+```text
+verified
+approved
+confirmed
+complete
+completed
+```
+
+검증되지 않은 사실은
+AI Docent의 evidence로 사용하지 않습니다.
+
+---
+
+# 13. AI Docent 최소 근거
+
+Place Docent는 다음 중 하나 이상이 있어야 생성 가능합니다.
+
+```text
+Scene description
+또는
+검증된 verified_fact
+```
+
+둘 다 없다면 생성하지 않습니다.
+
+```json
+{
+  "code": "DOCENT_CONTEXT_INSUFFICIENT",
+  "message": "아직 도슨트를 만들 만큼 충분한 장면 정보가 준비되지 않았어요."
+}
+```
+
+---
+
+# 14. AI Docent Error Handling
+
+## `DOCENT_NOT_ENABLED`
+
+HTTP `503`
+
+실제 OpenAI 호출이 비활성화된 상태입니다.
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+## `INVALID_DOCENT_REQUEST`
+
+HTTP `400`
+
+잘못된 ID, 언어 또는 Course Stop이 전달된 경우입니다.
+
+## `DOCENT_CONTEXT_NOT_FOUND`
+
+HTTP `404`
+
+요청한 작품과 장소의 연결 정보를 찾지 못한 경우입니다.
+
+## `DOCENT_CONTEXT_INSUFFICIENT`
+
+HTTP `422`
+
+도슨트를 생성할 최소 근거가 부족한 경우입니다.
+
+## `DOCENT_GENERATION_FAILED`
+
+HTTP `500`
+
+LLM 요청 실패 또는 예상하지 못한 도슨트 생성 오류입니다.
+
+---
+
+# 15. AI Docent 생성 제한
+
+Prompt에서는 다음 생성을 금지합니다.
+
+- DB에 없는 촬영지
+- DB에 없는 Scene
+- Episode 추측
+- 배우 등장 여부 추측
+- 실제 대사 생성
+- 시설 및 내부 공간 추측
+- 촬영 구도 추측
+- 출입 가능 여부 추측
+- 운영 시간 추측
+- 촬영 허가 여부 추측
+- 실제 배우가 직접 말하는 것처럼 사칭
+
+---
+
+# 16. AI Docent 활성화
+
+현재 실제 OpenAI 호출은 환경변수로 제어합니다.
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+실제 AI 연결 단계에서는:
+
+```env
+ENABLE_OPENAI_DOCENT=true
+```
+
+로 변경합니다.
+
+API Key는 서버 환경변수에서만 사용합니다.
+
+---
+
+# 17. Frontend 상태 처리 기준
 
 Frontend에서는 API 결과를 모두 같은 실패 상태로 처리하지 않습니다.
 
@@ -821,138 +858,21 @@ Partial / Fallback
 Validation
 ```
 
----
-
-## Loading
-
-요청이 진행 중인 상태입니다.
-
-예:
+AI Docent Mock UX에서는:
 
 ```text
-Trip 생성 중
-후보 촬영지 조회 중
-TMAP Route 조회 중
+Loading
+Success
+Empty
+Error
+Retry
 ```
 
-기존 데이터가 있다면
-가능한 범위에서 화면을 유지합니다.
+상태를 분리합니다.
 
 ---
 
-## Empty
-
-정상적으로 요청은 처리됐지만
-현재 데이터 또는 조건으로 결과를 만들 수 없는 상태입니다.
-
-예:
-
-```text
-NO_FILMING_LOCATIONS
-NO_COORDINATED_FILMING_LOCATIONS
-NO_AVAILABLE_ROUTE
-추가 가능한 촬영지 없음
-검색 결과 없음
-```
-
-사용자에게 가능한 다음 행동을 안내합니다.
-
-```text
-조건 다시 설정
-작품 / 배우 다시 선택
-배우 조건 없이 작품 전체로 범위 확장
-```
-
----
-
-## Error
-
-데이터 조회 실패 또는 예상하지 못한 서버 오류입니다.
-
-예:
-
-```text
-TRIP_CANDIDATES_FETCH_FAILED
-TRIP_CREATION_FAILED
-Network Error
-```
-
-Retry 가능한 경우
-다시 시도할 수 있도록 안내합니다.
-
----
-
-## Partial / Fallback
-
-일부 기능은 실패했지만
-핵심 Course는 계속 사용할 수 있는 상태입니다.
-
-예:
-
-```text
-TMAP 일부 구간 실패
-TMAP 전체 fallback
-Kakao Map 실패
-localStorage 저장 실패
-```
-
-일부 외부 기능의 실패 때문에
-Course 전체를 사용할 수 없게 만들지 않습니다.
-
----
-
-## Validation
-
-사용자가 Course를 편집한 뒤
-현재 여행 조건을 벗어난 상태입니다.
-
-예:
-
-```text
-최대 도보 시간 초과
-여행 가능 시간 초과
-```
-
-Course 자체는 유지하고
-문제가 되는 조건을 안내합니다.
-
----
-
-## 1개 장소 Course
-
-오류나 Empty로 처리하지 않습니다.
-
-```text
-stops.length = 1
-```
-
-인 경우에도 Course를 정상 표시합니다.
-
-`routeSelectionReason`을 기준으로
-왜 1곳으로 구성됐는지 설명하고
-원인에 맞는 다음 행동을 제공합니다.
-
-예:
-
-```text
-ONLY_ONE_CANDIDATE
-+
-actorIds 존재
-↓
-배우 조건 없이 작품 전체로 넓혀보기
-```
-
-```text
-WALKING_LIMIT
-DURATION_LIMIT
-MULTIPLE_CONSTRAINTS
-↓
-여행 조건 다시 설정하기
-```
-
----
-
-# 11. API 설계 원칙
+# 18. API 설계 원칙
 
 ## 1. 촬영지 사실은 DB에서 가져온다
 
@@ -964,8 +884,6 @@ AI Generated Place
 → 사용하지 않음
 ```
 
----
-
 ## 2. 배우 촬영지는 Scene 관계를 기준으로 한다
 
 ```text
@@ -975,11 +893,6 @@ Scene
 ↓
 Place
 ```
-
-작품 출연 사실만으로
-작품 전체 장소를 배우 촬영지로 처리하지 않습니다.
-
----
 
 ## 3. Empty와 Error를 구분한다
 
@@ -991,8 +904,6 @@ API / DB / Network 실패
 → Error
 ```
 
----
-
 ## 4. 부분 실패가 전체 기능 실패로 전파되지 않게 한다
 
 ```text
@@ -1000,17 +911,27 @@ TMAP 실패
 → 해당 구간 Haversine fallback
 ```
 
----
-
 ## 5. 데이터 부족 시 조건을 자동 변경하지 않는다
-
-```text
-Candidate 부족
-↓
-자동 범위 확장 X
-↓
-사용자에게 선택권 제공
-```
 
 사용자가 직접 선택한 경우에만
 배우 조건을 제거해 Course를 다시 생성합니다.
+
+## 6. AI 입력은 서버에서 다시 구성한다
+
+```text
+Client ID
+↓
+Server DB Query
+↓
+Verified Context
+↓
+LLM
+```
+
+Client가 전달한 설명 문자열을
+AI의 사실 근거로 직접 신뢰하지 않습니다.
+
+## 7. 실제 AI 호출은 환경변수로 제어한다
+
+개발 중 의도하지 않은 비용 발생을 막기 위해
+실제 OpenAI 호출 여부를 별도로 제어합니다.

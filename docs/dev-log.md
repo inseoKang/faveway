@@ -1072,6 +1072,355 @@ API와 UI 사이의 상태 계약 설계 사례로 설명할 수 있다.
 
 ---
 
+# 2026-09-20 | AI Docent 서버 기반 및 Mock UX 구현
+
+## 문제
+
+FAVEWAY의 핵심 AI 기능으로
+촬영지를 방문한 사용자에게 작품과 장면을 설명하는
+AI Docent가 필요했다.
+
+하지만 처음부터 실제 LLM을 화면에 연결하면
+다음 문제가 동시에 발생한다.
+
+```text
+DB Context 문제
++
+Prompt 문제
++
+OpenAI API 문제
++
+비용 문제
++
+Frontend UX 문제
+```
+
+또한 AI가 DB에 없는 장면이나 장소 정보를 생성하면
+FAVEWAY의 핵심 원칙과 충돌한다.
+
+## 판단
+
+AI Docent의 입력은
+Client가 전달한 설명 문자열을 그대로 사용하지 않는다.
+
+Frontend에서는 식별 정보만 전달하고,
+서버가 DB에서 검증 데이터를 다시 조회하도록 설계했다.
+
+```text
+Client
+↓
+contentId
+placeId
+order
+
+Server
+↓
+Supabase
+↓
+Content
+Place
+Scene
+Actor
+Verified Evidence
+↓
+LLM
+```
+
+또한 실제 OpenAI API를 UI에 바로 연결하지 않고,
+Mock 데이터로 사용자 경험을 먼저 완성하기로 했다.
+
+## 구현 1. OpenAI 서버 기반
+
+```text
+src/lib/ai/openai.ts
+```
+
+OpenAI API Key는
+Client에 노출하지 않고 서버에서만 사용한다.
+
+## 구현 2. Docent Context Layer
+
+```text
+src/lib/ai/docent-context.ts
+```
+
+Place 기준으로:
+
+```text
+Place
+↓
+scene_places
+↓
+Scene
+↓
+scene_actors
+↓
+Actor
+```
+
+관계를 조회한다.
+
+Scene은 요청한 `contentId` 범위로 다시 제한한다.
+
+## 구현 3. 검증된 evidence만 사용
+
+현재 다음 검증 상태만 AI evidence로 사용한다.
+
+```text
+verified
+approved
+confirmed
+complete
+completed
+```
+
+즉:
+
+```text
+verified_fact 존재
++
+허용된 verification_status
+↓
+AI Context
+```
+
+구조로 제한한다.
+
+## 구현 4. 최소 생성 근거
+
+Place Docent는 다음 중 하나 이상이 있어야 한다.
+
+```text
+Scene description
+또는
+Verified Fact
+```
+
+둘 다 없으면:
+
+```text
+DOCENT_CONTEXT_INSUFFICIENT
+```
+
+으로 처리한다.
+
+## 구현 5. Place / Course Docent API
+
+```text
+POST /api/docents/place
+POST /api/docents/course
+```
+
+### Place Docent
+
+한 장소의 작품 / Scene / Actor / 검증 근거를 설명한다.
+
+### Course Docent
+
+Course Stops 순서를 유지하면서
+여러 장소를 하나의 이야기 흐름으로 연결한다.
+
+## 구현 6. Prompt 안전 규칙
+
+다음 생성을 금지했다.
+
+```text
+촬영지 생성
+Scene 생성
+Episode 추측
+Actor 추측
+대사 생성
+촬영 사실 생성
+시설 생성
+내부 공간 추측
+촬영 구도 추측
+출입 가능 여부 추측
+운영 시간 추측
+```
+
+또한 실제 배우가 직접 설명하는 것처럼
+1인칭으로 사칭하지 않도록 제한했다.
+
+## 구현 7. Structured Output
+
+LLM 응답은 다음 구조로 제한한다.
+
+```text
+title
+narration
+```
+
+필수 필드가 없거나 비어 있으면
+정상 결과로 사용하지 않는다.
+
+## 구현 8. 실제 API 호출 잠금
+
+```env
+ENABLE_OPENAI_DOCENT=false
+```
+
+비활성 상태에서는:
+
+```text
+POST /api/docents/place
+POST /api/docents/course
+↓
+DOCENT_NOT_ENABLED
+```
+
+로 종료한다.
+
+이를 통해 개발 중 의도하지 않은
+OpenAI API 비용 발생을 방지한다.
+
+## 구현 9. Course Docent Mock UX
+
+Course 상단:
+
+```text
+[이 코스 이야기 듣기]
+```
+
+를 추가했다.
+
+## 구현 10. Place Docent Mock UX
+
+각 Course Stop:
+
+```text
+[현장에서 도슨트 듣기]
+```
+
+버튼을 추가했다.
+
+## 구현 11. 공통 DocentDialog
+
+```text
+DocentDialog
+↓
+mode = course | place
+```
+
+지원 상태:
+
+```text
+Loading
+Success
+Empty
+Error
+Retry
+```
+
+모바일에서는 Bottom Sheet,
+넓은 화면에서는 Dialog 형태로 표시한다.
+
+## 구현 12. Course 상태와 Docent 상태 연결
+
+```text
+장소 추가
+장소 삭제
+순서 변경
+Course 초기화
+배우 조건 제거 후 Course 재생성
+↓
+최신 Docent Stop 목록
+```
+
+`useMemo`를 사용해
+불필요한 배열 재생성을 줄였다.
+
+## 이슈
+
+DocentDialog의 Effect 내부에서
+`loadDocent()`를 즉시 호출하면서 React lint에서:
+
+```text
+Calling setState synchronously within an effect can trigger cascading renders
+```
+
+오류가 발생했다.
+
+## 해결
+
+```text
+useEffect
+↓
+setTimeout(..., 0)
+↓
+loadDocent
+```
+
+형태로 변경해
+Effect 내부의 동기 state update를 피했다.
+
+## TTS 판단
+
+이번 단계에서는 TTS를 연결하지 않았다.
+
+```text
+DB Context 정확성
+↓
+AI Text 품질
+↓
+Docent UX
+↓
+TTS
+```
+
+순서로 진행한다.
+
+현재 UI에는:
+
+```text
+음성으로 듣기 · 준비 중
+```
+
+상태만 표시한다.
+
+## 결과
+
+현재 구조:
+
+```text
+UI
+→ Mock
+
+실제 API
+→ 구현되어 있으나 비활성
+```
+
+향후:
+
+```text
+createMockPlaceDocent
+createMockCourseDocent
+```
+
+부분만 실제 API 호출로 교체할 수 있다.
+
+## 포트폴리오 포인트
+
+AI 기능을 단순한 LLM 호출로 붙이지 않고:
+
+```text
+DB 검증
+↓
+Server Context
+↓
+Prompt Guardrail
+↓
+Structured Output
+↓
+Frontend 상태 처리
+```
+
+로 책임을 분리했다.
+
+또한 실제 AI 비용을 사용하기 전에
+Mock을 이용해 사용자 경험과 상태 처리를 먼저 구현했다.
+
+---
+
 # 현재 핵심 Frontend 상태 흐름
 
 ```text
@@ -1096,6 +1445,17 @@ Summary
 Kakao Map
 ↓
 localStorage
+```
+
+AI Docent는 현재 Course Stops를 기반으로
+별도의 Mock UX를 구성한다.
+
+```text
+Course Stops
+↓
+Docent Stop Order
+↓
+Course / Place Docent Mock
 ```
 
 ---
@@ -1136,6 +1496,8 @@ walking time
 stay time
 ↓
 Summary
+↓
+Docent Stop Order
 ```
 
 ---
@@ -1170,16 +1532,26 @@ TMAP fallback
 
 ## AI
 
+현재:
+
+```text
+검증된 정보 기반 Docent Context
++
+Mock Docent UX
++
+실제 OpenAI 연결용 Route Handler
+```
+
 향후:
 
 ```text
-검증된 정보 기반 설명
+실제 OpenAI UI 연결
 개인화
 Ranking
-Docent
+TTS
 ```
 
-AI가 촬영지를 생성하지 않는다.
+AI가 촬영지나 장면 사실을 생성하지 않는다.
 
 ---
 
@@ -1187,46 +1559,62 @@ AI가 촬영지를 생성하지 않는다.
 
 ## 촬영지 상세 UX
 
-기본 정보 표시는 구현되어 있다.
+현재 구현:
+
+```text
+Scene
+Episode
+Scene Actor
+Verification
+Source
+실제 위치
+Kakao Map 이동 링크
+```
 
 남은 작업:
 
 ```text
-Scene / Episode 표현 방식
-Actor → Scene → Place 관계 시각화
-Verification UI
-Source UX
-장소 이미지
+장소 자체 설명 데이터 보강
+장소 이미지 데이터 검토
+장소 이미지 표시
+AI Docent 연결
 ```
 
 ---
 
 ## AI Docent
 
-예상 입력:
+현재 구현:
 
 ```text
-사용자 취향
+Course / Place Mock UX
 +
-여행 분위기
+DB Context Layer
 +
-Place
+Prompt
 +
-Content
+OpenAI Route Handler
 +
-Scene
-+
-Actor
-+
-Episode
-+
-verified_fact
-+
-source_url
+Structured Output
 ```
 
-AI는 사실을 새로 만드는 것이 아니라
-검증된 정보를 설명하는 역할을 맡는다.
+현재 실제 OpenAI 호출:
+
+```text
+비활성
+```
+
+다음 작업:
+
+```text
+데이터 보강
+↓
+실제 OpenAI 연결
+↓
+Prompt 품질 검증
+↓
+TTS
+```
 
 ---
 

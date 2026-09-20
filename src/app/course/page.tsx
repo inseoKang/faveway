@@ -7,8 +7,11 @@ import styles from "./course.module.css";
 import BackButton from "@/components/common/BackButton";
 import InlineWarning from "@/components/common/InlineWarning";
 import StateFeedback from "@/components/common/StateFeedback";
+import DocentDialog from "@/components/docent/DocentDialog";
 import CourseMap from "@/components/map/CourseMap";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
+
+import type { DocentMockStop } from "@/lib/ai/docent-mock";
 
 import {
   calculateDistanceKm,
@@ -62,6 +65,15 @@ type DetailTarget = {
   contentId: number;
   place: Place;
 };
+
+type DocentTarget =
+  | {
+      mode: "course";
+    }
+  | {
+      mode: "place";
+      stop: CourseStop;
+    };
 
 type WalkingViolation = {
   fromOrder: number;
@@ -434,6 +446,9 @@ function CourseContent() {
   const searchParams = useSearchParams();
 
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
+
+  const [docentTarget, setDocentTarget] = useState<DocentTarget | null>(null);
+
   const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(null);
 
   const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
@@ -941,6 +956,24 @@ function CourseContent() {
     return validateCourse(course);
   }, [course]);
 
+  const docentStops = useMemo<DocentMockStop[]>(() => {
+    if (!course) {
+      return [];
+    }
+
+    return course.stops.map((stop) => ({
+      contentId: stop.contentId,
+      contentTitle: stop.contentTitle,
+      placeId: stop.placeId,
+      order: stop.order,
+      verifiedFact: stop.verifiedFact,
+      place: {
+        name: stop.place.name,
+        address: stop.place.address,
+      },
+    }));
+  }, [course]);
+
   function persistCourse(nextCourse: CourseData) {
     if (!storageKey) {
       return;
@@ -1003,6 +1036,13 @@ function CourseContent() {
 
     if (detailTarget?.place.id === placeId) {
       setDetailTarget(null);
+    }
+
+    if (
+      docentTarget?.mode === "place" &&
+      docentTarget.stop.placeId === placeId
+    ) {
+      setDocentTarget(null);
     }
   }
 
@@ -1072,6 +1112,7 @@ function CourseContent() {
     setCourse(initialCourse);
     setSelectedPlaceId(null);
     setDetailTarget(null);
+    setDocentTarget(null);
     setIsAddPlaceOpen(false);
     setAddPlaceCandidates(null);
     setCandidateError(null);
@@ -1299,6 +1340,7 @@ function CourseContent() {
       setCourse(nextCourse);
       setSelectedPlaceId(null);
       setDetailTarget(null);
+      setDocentTarget(null);
       setIsAddPlaceOpen(false);
       setAddPlaceCandidates(null);
       setCandidateError(null);
@@ -1469,6 +1511,39 @@ function CourseContent() {
                 : `${course.maxWalkingMinutes}분 이내`}
             </span>
           </div>
+        </section>
+
+        <section
+          className={styles.docentSection}
+          aria-labelledby="course-docent-title"
+        >
+          <div className={styles.docentSectionTop}>
+            <div className={styles.docentSectionText}>
+              <p className={styles.docentEyebrow}>AI DOCENT</p>
+
+              <h2 id="course-docent-title">
+                이 코스의 이야기를 들어보세요
+              </h2>
+
+              <p>
+                촬영지 순서에 맞춰 작품의 장면을 하나의 이야기처럼 이어서
+                소개해드려요.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className={styles.courseDocentButton}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setDocentTarget({
+                mode: "course",
+              });
+            }}
+          >
+            ▶ 이 코스 이야기 듣기
+          </button>
         </section>
 
         {singleStopExplanation && (
@@ -1762,6 +1837,22 @@ function CourseContent() {
                     </span>
                   </button>
 
+                  <button
+                    type="button"
+                    className={styles.placeDocentButton}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setSelectedPlaceId(stop.placeId);
+
+                      setDocentTarget({
+                        mode: "place",
+                        stop,
+                      });
+                    }}
+                  >
+                    ▶ 현장에서 도슨트 듣기
+                  </button>
+
                   <div className={styles.editControls}>
                     <div>
                       <button
@@ -1949,6 +2040,30 @@ function CourseContent() {
           placeId={detailTarget.place.id}
           placeName={detailTarget.place.name}
           onClose={() => setDetailTarget(null)}
+        />
+      )}
+
+      {docentTarget && (
+        <DocentDialog
+          mode={docentTarget.mode}
+          courseTitle={title || "나의 여행 코스"}
+          stops={docentStops}
+          placeStop={
+            docentTarget.mode === "place"
+              ? {
+                  contentId: docentTarget.stop.contentId,
+                  contentTitle: docentTarget.stop.contentTitle,
+                  placeId: docentTarget.stop.placeId,
+                  order: docentTarget.stop.order,
+                  verifiedFact: docentTarget.stop.verifiedFact,
+                  place: {
+                    name: docentTarget.stop.place.name,
+                    address: docentTarget.stop.place.address,
+                  },
+                }
+              : null
+          }
+          onClose={() => setDocentTarget(null)}
         />
       )}
     </main>
