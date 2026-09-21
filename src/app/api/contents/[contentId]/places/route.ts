@@ -14,6 +14,7 @@ type Place = {
   latitude: number | null;
   longitude: number | null;
   place_type: string | null;
+  region: string | null;
   is_active: boolean;
 };
 
@@ -37,6 +38,8 @@ type ScenePlace = {
   scene_id: number;
   place_id: number;
 };
+
+const SERVICE_REGION = "서울";
 
 function parseActorIds(actorIdsParam: string | null): number[] {
   if (!actorIdsParam) {
@@ -89,6 +92,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           latitude,
           longitude,
           place_type,
+          region,
           is_active
         )
       `,
@@ -109,7 +113,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const relations = (data ?? []) as unknown as PlaceRelation[];
 
     const activeRelations = relations.filter(
-      (relation) => relation.places.is_active !== false,
+      (relation) =>
+        relation.places.is_active !== false &&
+        relation.places.region === SERVICE_REGION,
     );
 
     /**

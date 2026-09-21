@@ -25,6 +25,7 @@ type Place = {
   latitude: number | null;
   longitude: number | null;
   place_type: string | null;
+  region: string | null;
   is_active: boolean;
 };
 
@@ -142,14 +143,10 @@ type WalkingRouteApiResponse = {
   message?: string;
 };
 
-type WalkingRouteStatus =
-  | "idle"
-  | "loading"
-  | "real"
-  | "partial"
-  | "fallback";
+type WalkingRouteStatus = "idle" | "loading" | "real" | "partial" | "fallback";
 
 const COURSE_STORAGE_PREFIX = "faveway:course";
+const COURSE_REGION = "서울";
 
 const ROUTE_SELECTION_REASONS: RouteSelectionReason[] = [
   "NORMAL",
@@ -166,15 +163,11 @@ function isFiniteNumber(value: unknown): value is number {
 function isIntegerArray(value: unknown): value is number[] {
   return (
     Array.isArray(value) &&
-    value.every(
-      (item) => typeof item === "number" && Number.isInteger(item),
-    )
+    value.every((item) => typeof item === "number" && Number.isInteger(item))
   );
 }
 
-function isRouteSelectionReason(
-  value: unknown,
-): value is RouteSelectionReason {
+function isRouteSelectionReason(value: unknown): value is RouteSelectionReason {
   return (
     typeof value === "string" &&
     ROUTE_SELECTION_REASONS.includes(value as RouteSelectionReason)
@@ -1192,6 +1185,7 @@ function CourseContent() {
         if (
           currentPlaceIds.has(candidate.place.id) ||
           candidate.place.is_active === false ||
+          candidate.place.region !== COURSE_REGION ||
           latitude == null ||
           longitude == null ||
           !Number.isFinite(latitude) ||
@@ -1346,9 +1340,7 @@ function CourseContent() {
       setCandidateError(null);
       setScopeExpansionError(null);
       setWalkingRouteSegments([]);
-      setWalkingRouteStatus(
-        nextCourse.stops.length >= 2 ? "loading" : "idle",
-      );
+      setWalkingRouteStatus(nextCourse.stops.length >= 2 ? "loading" : "idle");
 
       const params = new URLSearchParams({
         data: encodeURIComponent(JSON.stringify(nextCourse)),
@@ -1521,9 +1513,7 @@ function CourseContent() {
             <div className={styles.docentSectionText}>
               <p className={styles.docentEyebrow}>AI DOCENT</p>
 
-              <h2 id="course-docent-title">
-                이 코스의 이야기를 들어보세요
-              </h2>
+              <h2 id="course-docent-title">이 코스의 이야기를 들어보세요</h2>
 
               <p>
                 촬영지 순서에 맞춰 작품의 장면을 하나의 이야기처럼 이어서
@@ -1569,7 +1559,10 @@ function CourseContent() {
                 </p>
 
                 {scopeExpansionError && (
-                  <p className="mt-3 text-sm leading-6 text-red-600" role="alert">
+                  <p
+                    className="mt-3 text-sm leading-6 text-red-600"
+                    role="alert"
+                  >
                     {scopeExpansionError}
                   </p>
                 )}
@@ -1591,8 +1584,7 @@ function CourseContent() {
 
                   {(course.routeSelectionReason === "WALKING_LIMIT" ||
                     course.routeSelectionReason === "DURATION_LIMIT" ||
-                    course.routeSelectionReason ===
-                      "MULTIPLE_CONSTRAINTS") && (
+                    course.routeSelectionReason === "MULTIPLE_CONSTRAINTS") && (
                     <button
                       type="button"
                       onClick={goToPlanningWithCurrentSelection}
@@ -1892,8 +1884,7 @@ function CourseContent() {
                     data-warning={nextStopExceedsWalkingLimit}
                   >
                     <p>
-                      {stop.order} → {nextStop.order}{" "}
-                      <span>다음 장면까지</span>
+                      {stop.order} → {nextStop.order} <span>다음 장면까지</span>
                     </p>
 
                     <strong>
