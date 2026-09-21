@@ -5,7 +5,7 @@
 FAVEWAY의 추천 로직은
 DB에 없는 촬영지를 생성하는 것이 아니라,
 
-**검증된 촬영지 Candidate 안에서 실제 여행 가능한 Route를 구성하는 것**
+**검증된 촬영지 Candidate 안에서 실제 여행 가능한 서울 도보 Route를 구성하는 것**
 
 을 목표로 합니다.
 
@@ -28,6 +28,12 @@ durationMinutes
 maxWalkingMinutes
 ```
 
+현재 Course 서비스 지역:
+
+```text
+서울
+```
+
 ---
 
 # 3. Candidate 생성
@@ -42,7 +48,8 @@ place_relations
 Places
 ```
 
-선택한 작품의 전체 촬영지를 사용합니다.
+선택한 작품의 촬영지 중
+현재 서비스 범위에 맞는 서울 활성 장소를 사용합니다.
 
 ---
 
@@ -79,12 +86,32 @@ Candidate 생성 후:
 ```text
 Active Place Filter
 ↓
+Region Filter
+↓
+Actor → Scene → Place Filter
+↓
 Duplicate Filter
 ↓
 Coordinate Filter
 ```
 
 를 적용합니다.
+
+현재 지역 필터:
+
+```text
+region = 서울
+```
+
+현재 Course 후보 기본 조건:
+
+```text
+is_active != false
++
+region = 서울
++
+좌표 존재
+```
 
 배우 기준 장소 조회에서는 동일한:
 
@@ -94,9 +121,44 @@ content_id + place_id
 
 관계를 한 번만 사용합니다.
 
+서울 외 촬영지는
+DB에서 삭제하지 않고 현재 Course 후보에서만 제외합니다.
+
 ---
 
-# 5. 초기 거리 계산
+# 5. Course 장소 추가 후보
+
+Course 화면에서 장소를 추가할 때도
+초기 Course 생성과 동일한 서비스 범위 조건을 적용합니다.
+
+```text
+GET /api/contents/:contentId/places
+↓
+Active
+↓
+서울
+↓
+현재 Course에 없는 장소
+↓
+좌표 존재
+↓
+추가 Candidate
+```
+
+Frontend에서도:
+
+```text
+is_active
+region
+coordinate
+duplicate
+```
+
+조건을 한 번 더 확인합니다.
+
+---
+
+# 6. 초기 거리 계산
 
 Course 생성 단계에서는
 위도·경도를 이용한 Haversine Formula를 사용합니다.
@@ -120,7 +182,7 @@ Haversine은 실제 도로 구조가 아닌
 
 ---
 
-# 6. Route Combination
+# 7. Route Combination
 
 후보 장소들을 이용해
 가능한 방문 순서를 생성합니다.
@@ -144,7 +206,7 @@ Route 조합 수가 빠르게 증가합니다.
 
 ---
 
-# 7. Route Constraint
+# 8. Route Constraint
 
 ## 전체 여행 시간
 
@@ -182,7 +244,7 @@ Route 조합 수가 빠르게 증가합니다.
 
 ---
 
-# 8. 최대 방문 장소 수
+# 9. 최대 방문 장소 수
 
 현재:
 
@@ -197,14 +259,15 @@ Candidate 수를 초과하지 않습니다.
 
 ---
 
-# 9. Route 선택 기준
+# 10. Route 선택 기준
 
 현재 주요 기준:
 
 ```text
-1. 여행 조건을 만족하는 Route인지 확인
-2. 가능한 최대 방문 장소 수 확보
-3. 총 이동거리 최소화
+1. 서울 활성 촬영지 후보인지 확인
+2. 여행 조건을 만족하는 Route인지 확인
+3. 가능한 최대 방문 장소 수 확보
+4. 총 이동거리 최소화
 ```
 
 초기 Route 비교에서 사용하는 이동거리는
@@ -212,7 +275,7 @@ Haversine 기반입니다.
 
 ---
 
-# 10. 체류 시간
+# 11. 체류 시간
 
 현재 체류 시간은:
 
@@ -244,7 +307,28 @@ MIN_STAY_MINUTES = 45
 
 ---
 
-# 11. Course 화면 실제 경로
+# 12. 현재 데이터 범위
+
+도깨비:
+
+```text
+서울 활성 촬영지 18곳
+```
+
+여신강림:
+
+```text
+서울 활성 촬영지 10곳
+```
+
+현재 Course 후보 조회에서
+위 조건이 정상적으로 적용되는 것을 확인했습니다.
+
+이 숫자는 데이터 정제에 따라 변경될 수 있습니다.
+
+---
+
+# 13. Course 화면 실제 경로
 
 초기 Course 생성 후
 Course 화면에서는 실제 보행 경로를 다시 조회합니다.
@@ -269,7 +353,7 @@ Kakao Map Polyline 갱신
 
 ---
 
-# 12. TMAP 요청 구조
+# 14. TMAP 요청 구조
 
 Client:
 
@@ -291,7 +375,7 @@ C → D
 
 ---
 
-# 13. TMAP Fallback
+# 15. TMAP Fallback
 
 TMAP 요청 실패가
 Course 전체 실패로 이어지지 않도록 합니다.
@@ -341,7 +425,7 @@ Course 자체는 계속 사용할 수 있습니다.
 
 ---
 
-# 14. 좌표 오류
+# 16. 좌표 오류
 
 하나의 장소에 좌표가 없다고 해서
 Walking Route 요청 전체를 실패시키지 않습니다.
@@ -349,9 +433,12 @@ Walking Route 요청 전체를 실패시키지 않습니다.
 문제가 있는 구간만 실패 상태로 반환하고
 다른 정상 구간은 TMAP을 계속 조회합니다.
 
+초기 Course Candidate 단계에서는
+좌표가 없는 장소를 제외합니다.
+
 ---
 
-# 15. Course 편집 후 재계산
+# 17. Course 편집 후 재계산
 
 다음 액션이 발생하면 Route를 다시 계산합니다.
 
@@ -381,7 +468,41 @@ Map 갱신
 
 ---
 
-# 16. 현재 한계
+# 18. is_active와 region 책임
+
+두 값은 서로 다른 역할을 가집니다.
+
+```text
+is_active
+→ 현재 방문 가능한 Course 후보인가
+
+region
+→ 현재 서비스 지역 범위에 포함되는가
+```
+
+예:
+
+```text
+월정사
+is_active = true
+region = 강원
+↓
+DB 유지
+서울 Course 제외
+```
+
+```text
+달콤커피 종로종각점
+region = 서울
+is_active = false
+↓
+촬영지 기록 유지
+Course 제외
+```
+
+---
+
+# 19. 현재 한계
 
 - 초기 Route 조합 평가는 Haversine 기반
 - TMAP 외부 API 장애 가능
@@ -390,10 +511,12 @@ Map 갱신
 - 신호 대기 / 혼잡도 등은 직접 반영하지 않음
 - Candidate 증가 시 Route 조합 비용 증가
 - 서버에서는 장소 수 - 1 만큼 TMAP 요청 발생
+- 서비스 지역이 현재 서울로 고정됨
+- `place_type` 데이터 품질이 아직 불균일함
 
 ---
 
-# 17. 향후 최적화
+# 20. 향후 최적화
 
 실제 호출량 문제가 확인되는 경우 다음을 검토합니다.
 
@@ -402,6 +525,7 @@ Map 갱신
 변경된 구간만 재조회
 TMAP 호출량 모니터링
 Route 탐색 알고리즘 최적화
+지역 조건 사용자 선택화
 ```
 
 현재 규모에서는
@@ -410,7 +534,7 @@ Route 탐색 알고리즘 최적화
 
 ---
 
-# 18. 향후 AI Recommendation
+# 21. 향후 AI Recommendation
 
 AI는 Candidate 생성자가 아니라
 Ranking / Personalization Layer로 사용합니다.
@@ -436,7 +560,7 @@ AI가 DB에 없는 Place ID를 반환하면
 
 ---
 
-# 19. AI Docent
+# 22. AI Docent
 
 향후 장소별 설명은:
 
@@ -452,6 +576,8 @@ Scene
 Actor
 +
 Place
++
+Place Description
 ↓
 LLM
 ↓

@@ -42,9 +42,19 @@ Actors
 
 ## `GET /api/contents/:contentId/places`
 
-특정 작품과 연결된 전체 촬영지를 조회합니다.
+특정 작품과 연결된 촬영지를 조회합니다.
 
-배우 필터가 없는 경우 작품 기준 촬영지를 사용합니다.
+현재 Course 서비스 범위에 맞춰
+다음 조건을 만족하는 장소만 반환합니다.
+
+```text
+is_active != false
++
+region = 서울
+```
+
+배우 필터가 없는 경우
+작품 기준 서울 활성 촬영지를 사용합니다.
 
 ```text
 Content
@@ -52,13 +62,20 @@ Content
 Place Relation
 ↓
 Place
+↓
+Active
+↓
+서울
 ```
+
+Course의 장소 추가 후보도
+이 API를 사용합니다.
 
 ---
 
 ## `GET /api/contents/:contentId/places?actorIds=3,5`
 
-특정 작품의 촬영지 중
+특정 작품의 서울 활성 촬영지 중
 선택한 배우가 실제 등장한 Scene과 연결된 장소만 조회합니다.
 
 복수 배우는 현재 OR 조건입니다.
@@ -69,6 +86,10 @@ UNION
 Actor B Scene
 ↓
 Place
+↓
+Active
+↓
+서울
 ```
 
 배우가 작품에 출연했다는 사실만으로
@@ -200,6 +221,12 @@ DB에 저장된 실제 촬영지 후보를 이용해
 
 AI가 촬영지를 생성하지 않습니다.
 
+현재 Course 대상 지역:
+
+```text
+서울
+```
+
 ---
 
 ## Request
@@ -272,9 +299,11 @@ actorIds
 ↓
 Candidate 조회
 ↓
-Actor → Scene → Place Filtering
-↓
 활성 장소 확인
+↓
+서울 지역 필터
+↓
+Actor → Scene → Place Filtering
 ↓
 place_id 기준 중복 제거
 ↓
@@ -331,7 +360,39 @@ TMAP 실제 보행 경로를 다시 조회합니다.
 
 ---
 
-# 5. Trip Success Response
+# 5. Course 지역 필터
+
+현재 초기 서비스 범위는 서울입니다.
+
+Course 후보 조건:
+
+```text
+places.is_active != false
++
+places.region = 서울
++
+좌표 존재
+```
+
+서울 외 장소는 DB에서 삭제하지 않습니다.
+
+예:
+
+```text
+월정사
+포스코타워송도
+나주영상테마파크
+```
+
+등의 촬영지 데이터는 DB에 유지하지만
+현재 Course 후보에서는 제외합니다.
+
+Course 장소 추가 후보 조회에도
+같은 지역 조건을 적용합니다.
+
+---
+
+# 6. Trip Success Response
 
 예:
 
@@ -356,9 +417,9 @@ TMAP 실제 보행 경로를 다시 조회합니다.
         "stayMinutes": 180,
         "distanceFromPreviousKm": 0,
         "walkingMinutesFromPrevious": 0,
-        "relationType": "filming_location",
-        "verificationStatus": "verified",
-        "verifiedFact": "검증된 장소 설명",
+        "relationType": "SCENE_ACTOR",
+        "verificationStatus": "UNVERIFIED",
+        "verifiedFact": null,
         "place": {}
       }
     ]
@@ -386,6 +447,8 @@ CONTENT
 작품 / 배우 조건
 ↓
 활성 장소
+↓
+서울 지역
 ↓
 중복 제거
 ↓
@@ -447,7 +510,7 @@ Frontend는 1개 장소 Course를 Error로 처리하지 않고
 
 ---
 
-# 6. 배우 조건 제거 재요청
+# 7. 배우 조건 제거 재요청
 
 배우 기준 후보가 부족한 경우
 애플리케이션이 자동으로 작품 전체 범위로 확장하지 않습니다.
@@ -472,9 +535,11 @@ Frontend는 1개 장소 Course를 Error로 처리하지 않고
 작품, 여행 가능 시간, 최대 도보 시간은 유지하고
 배우 필터만 제거합니다.
 
+서울 지역 제한은 그대로 유지됩니다.
+
 ---
 
-# 7. Trip Error Handling
+# 8. Trip Error Handling
 
 Trip API는 가능한 경우 다음 형태로 오류를 반환합니다.
 
@@ -495,13 +560,14 @@ HTTP `400`
 
 HTTP `404`
 
-선택 조건과 연결된 촬영지가 없는 경우입니다.
+선택 조건과 연결된 서울 활성 촬영지가 없는 경우입니다.
 
 ## `NO_COORDINATED_FILMING_LOCATIONS`
 
 HTTP `404`
 
-촬영지는 존재하지만 Course 계산에 필요한 좌표가 없는 경우입니다.
+서울 활성 촬영지는 존재하지만
+Course 계산에 필요한 좌표가 없는 경우입니다.
 
 ## `NO_AVAILABLE_ROUTE`
 
@@ -523,7 +589,7 @@ HTTP `500`
 
 ---
 
-# 8. Walking Route
+# 9. Walking Route
 
 ## `POST /api/routes/walking`
 
@@ -569,7 +635,7 @@ TMAP 조회
 
 ---
 
-# 9. Walking Route 부분 실패
+# 10. Walking Route 부분 실패
 
 한 구간의 TMAP 요청 실패가
 Course 전체 실패로 이어지지 않도록 구성합니다.
@@ -587,7 +653,7 @@ TMAP 실패 구간
 
 ---
 
-# 10. AI Docent
+# 11. AI Docent
 
 AI Docent는
 DB에 존재하는 작품·장면·배우·장소·검증 정보를 기반으로
@@ -643,50 +709,11 @@ verified_fact
 LLM
 ```
 
-### Success Response
-
-```json
-{
-  "data": {
-    "type": "place",
-    "contentId": 1,
-    "placeId": 10,
-    "language": "ko",
-    "title": "장소의 이야기",
-    "narration": "AI Docent 설명",
-    "generatedFrom": {
-      "sceneIds": [1, 2],
-      "hasVerifiedFact": true
-    }
-  }
-}
-```
-
 ---
 
 ## `POST /api/docents/course`
 
 Course 전체 장소를 순서대로 연결한 Course Docent를 생성합니다.
-
-### Request
-
-```json
-{
-  "language": "ko",
-  "stops": [
-    {
-      "contentId": 1,
-      "placeId": 10,
-      "order": 1
-    },
-    {
-      "contentId": 1,
-      "placeId": 20,
-      "order": 2
-    }
-  ]
-}
-```
 
 Client가 전달하는 정보는 식별자와 방문 순서입니다.
 
@@ -695,7 +722,7 @@ Client가 전달하는 정보는 식별자와 방문 순서입니다.
 
 ---
 
-# 11. AI Docent Context
+# 12. AI Docent Context
 
 AI Docent Context는 다음 데이터를 기준으로 구성합니다.
 
@@ -729,27 +756,36 @@ Scene은 요청된 `contentId` 범위로 다시 제한합니다.
 
 ---
 
-# 12. verified_fact 사용 기준
+# 13. verification_status 현재 DB 값
 
-AI 근거 정보로 사용하는 `verified_fact`는
-검증 상태를 통과한 데이터로 제한합니다.
-
-현재 허용 상태:
+현재 실제 DB에서 확인된 상태값:
 
 ```text
-verified
-approved
-confirmed
-complete
-completed
+PUBLIC_DATA
+UNVERIFIED
 ```
 
-검증되지 않은 사실은
-AI Docent의 evidence로 사용하지 않습니다.
+존재하지 않는 상태값을
+문서나 코드에서 임의로 정의하지 않습니다.
+
+현재 AI Docent Context 코드의 evidence 허용 기준과
+DB 실제 상태값 사이에는 정리가 필요한 부분이 있습니다.
+
+실제 AI UI 연결 전에:
+
+```text
+DB 상태값 확인
+↓
+Evidence 허용 기준 확정
+↓
+AI Context 코드 정리
+```
+
+가 필요합니다.
 
 ---
 
-# 13. AI Docent 최소 근거
+# 14. AI Docent 최소 근거
 
 Place Docent는 다음 중 하나 이상이 있어야 생성 가능합니다.
 
@@ -770,7 +806,7 @@ Scene description
 
 ---
 
-# 14. AI Docent Error Handling
+# 15. AI Docent Error Handling
 
 ## `DOCENT_NOT_ENABLED`
 
@@ -808,7 +844,7 @@ LLM 요청 실패 또는 예상하지 못한 도슨트 생성 오류입니다.
 
 ---
 
-# 15. AI Docent 생성 제한
+# 16. AI Docent 생성 제한
 
 Prompt에서는 다음 생성을 금지합니다.
 
@@ -826,7 +862,7 @@ Prompt에서는 다음 생성을 금지합니다.
 
 ---
 
-# 16. AI Docent 활성화
+# 17. AI Docent 활성화
 
 현재 실제 OpenAI 호출은 환경변수로 제어합니다.
 
@@ -834,7 +870,8 @@ Prompt에서는 다음 생성을 금지합니다.
 ENABLE_OPENAI_DOCENT=false
 ```
 
-실제 AI 연결 단계에서는:
+실제 AI 연결 단계에서는
+DB 검증 상태 정책을 먼저 정리한 뒤:
 
 ```env
 ENABLE_OPENAI_DOCENT=true
@@ -846,7 +883,7 @@ API Key는 서버 환경변수에서만 사용합니다.
 
 ---
 
-# 17. Frontend 상태 처리 기준
+# 18. Frontend 상태 처리 기준
 
 Frontend에서는 API 결과를 모두 같은 실패 상태로 처리하지 않습니다.
 
@@ -872,7 +909,7 @@ Retry
 
 ---
 
-# 18. API 설계 원칙
+# 19. API 설계 원칙
 
 ## 1. 촬영지 사실은 DB에서 가져온다
 
@@ -894,7 +931,15 @@ Scene
 Place
 ```
 
-## 3. Empty와 Error를 구분한다
+## 3. Course는 현재 서울 활성 장소만 사용한다
+
+```text
+is_active
++
+region = 서울
+```
+
+## 4. Empty와 Error를 구분한다
 
 ```text
 정상 조회 + 결과 없음
@@ -904,19 +949,19 @@ API / DB / Network 실패
 → Error
 ```
 
-## 4. 부분 실패가 전체 기능 실패로 전파되지 않게 한다
+## 5. 부분 실패가 전체 기능 실패로 전파되지 않게 한다
 
 ```text
 TMAP 실패
 → 해당 구간 Haversine fallback
 ```
 
-## 5. 데이터 부족 시 조건을 자동 변경하지 않는다
+## 6. 데이터 부족 시 조건을 자동 변경하지 않는다
 
 사용자가 직접 선택한 경우에만
 배우 조건을 제거해 Course를 다시 생성합니다.
 
-## 6. AI 입력은 서버에서 다시 구성한다
+## 7. AI 입력은 서버에서 다시 구성한다
 
 ```text
 Client ID
@@ -931,7 +976,7 @@ LLM
 Client가 전달한 설명 문자열을
 AI의 사실 근거로 직접 신뢰하지 않습니다.
 
-## 7. 실제 AI 호출은 환경변수로 제어한다
+## 8. 실제 AI 호출은 환경변수로 제어한다
 
 개발 중 의도하지 않은 비용 발생을 막기 위해
 실제 OpenAI 호출 여부를 별도로 제어합니다.

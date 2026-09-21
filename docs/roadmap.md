@@ -124,6 +124,8 @@ Place
 - [x] 복수 배우 OR 조건
 - [x] Actor → Scene → Place 후보 필터
 - [x] 활성 장소 필터
+- [x] 서울 지역 촬영지 필터
+- [x] 비활성 장소 Course 후보 제외
 - [x] 좌표 검증
 - [x] 중복 제거
 - [x] Route Combination
@@ -143,6 +145,7 @@ Place
 - [x] 장소 삭제
 - [x] 최소 1개 장소 유지
 - [x] 장소 추가
+- [x] 장소 추가 후보 서울 지역 필터
 - [x] 순서 위로 이동
 - [x] 순서 아래로 이동
 - [x] 거리 / 도보 / 체류 시간 재계산
@@ -213,6 +216,8 @@ Place
 - [x] 자동 범위 확장 금지
 - [x] 1개 장소 Course 이유 안내
 - [x] 사용자 선택 기반 배우 조건 제거
+- [x] 서울 외 촬영지 DB 유지 + Course 제외
+- [x] 폐점 촬영지 기록 유지 + Course 제외
 
 ---
 
@@ -229,7 +234,7 @@ Place
 - [x] Episode Context
 - [x] Scene Actor Context
 - [x] verified_fact Context
-- [x] verification_status 기반 evidence 필터
+- [x] verification_status 기반 evidence 필터 구조
 - [x] Place / Course Prompt 분리
 - [x] 실제 배우 사칭 방지 Prompt
 - [x] 미검증 사실 생성 방지 Prompt
@@ -258,6 +263,7 @@ Place
 - [x] Desktop Dialog
 - [x] Course Stop 변경 반영
 - [x] 장소 추가 / 삭제 / 순서 변경 반영
+- [x] PlaceDetailDialog와 Docent CTA 역할 분리
 
 ---
 
@@ -265,11 +271,28 @@ Place
 
 ## 1. Data 확장 및 정제
 
-- [ ] 장소 설명 데이터 기준 정의
-- [ ] `place_description` 도입 검토
-- [ ] 데이터 소스별 신뢰도 기준
+### 완료
+
+- [x] `places.region` 추가
+- [x] 기존 Place 지역 데이터 보강
+- [x] 서울 Course 범위 적용
+- [x] `places.place_description` 컬럼 추가
+- [x] `place_description` 역할 정의
+- [x] `scene_description` / `place_description` / `verified_fact` 책임 분리
+- [x] `verification_status` 실제 DB 값 확인
+- [x] `source_type` 기준 정리
+- [x] 도깨비 Scene / Actor / Place 관계 품질 점검
+- [x] 도깨비 서울 촬영지 1차 검증 정보 보강
+- [x] 폐점 촬영지 `is_active=false` 처리 기준 적용
+
+### 다음 작업
+
+- [ ] 도깨비 남은 촬영지 검증 보강
+- [ ] `place_description` 추가 보강
+- [ ] `place_type` 분류 기준 재정의
+- [ ] AI Docent evidence와 실제 `verification_status` 정합성 수정
+- [ ] source 관리 방식 추가 정리
 - [ ] 동일 장소 병합 기준
-- [ ] source 관리 기준
 - [ ] Import CSV 포맷 고정
 - [ ] 추가 작품 2~3개 구축
 - [ ] 추가 작품 Actor → Scene → Place 연결 검증
@@ -278,6 +301,7 @@ Place
 
 ## 2. AI Docent 실제 연결
 
+- [ ] 실제 DB `verification_status` 기준으로 Evidence Filter 정리
 - [ ] `DocentDialog` Mock → 실제 API 전환
 - [ ] `ENABLE_OPENAI_DOCENT=true` 실제 테스트
 - [ ] Place Docent 실제 생성 검증
@@ -288,7 +312,6 @@ Place
 - [ ] 실제 API Error / Retry 검증
 - [ ] 실제 OpenAI 사용량 확인
 - [ ] 비용 제한 기준 정리
-- [ ] PlaceDetailDialog와 Place Docent 연결
 
 ### 개인화
 
@@ -352,9 +375,9 @@ Place
 # 현재 개발 우선순위
 
 ```text
-1. AI Docent Mock UX 검증
+1. 도깨비 남은 데이터 보강
 ↓
-2. Data 확장 및 정제
+2. AI Evidence 상태 정책 정리
 ↓
 3. 실제 AI Docent 연결
 ↓
@@ -370,11 +393,13 @@ Place
 현재 가장 가까운 다음 작업:
 
 ```text
-Mock Docent 상태 테스트
+도깨비 남은 촬영지 검증
 ↓
-문서 정리
+place_description 보강
 ↓
-촬영지 데이터 보강
+AI Docent Evidence Filter 정리
+↓
+실제 OpenAI 연결
 ```
 
 ---
@@ -439,4 +464,12 @@ Server DB Query
 Verified Context
 ↓
 AI
+```
+
+## 8. 서비스 범위 밖 데이터는 삭제하지 않는다
+
+```text
+서울 외 Place
+→ DB 유지
+→ 현재 Course에서 제외
 ```

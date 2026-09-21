@@ -157,9 +157,11 @@ Content / Actor Selection
 ↓
 DB Candidate
 ↓
-Actor → Scene → Place Filtering
-↓
 Active Place Filter
+↓
+Seoul Region Filter
+↓
+Actor → Scene → Place Filtering
 ↓
 Place Deduplication
 ↓
@@ -181,6 +183,19 @@ TMAP Actual Walking Route
 ↓
 Course Summary / Kakao Polyline 갱신
 ```
+
+현재 Course는:
+
+```text
+region = 서울
++
+is_active = true
+```
+
+인 촬영지만 후보로 사용합니다.
+
+서울 외 촬영지 데이터는 삭제하지 않고
+DB에 유지합니다.
 
 최대 방문 장소 수:
 
@@ -220,15 +235,20 @@ Structured Docent Response
 AI에 사용하는 verified_fact는
 검증 상태를 통과한 데이터로 제한합니다.
 
-현재 허용 상태:
+현재 실제 DB의 `verification_status` 값은:
 
 ```text
-verified
-approved
-confirmed
-complete
-completed
+PUBLIC_DATA
+UNVERIFIED
 ```
+
+입니다.
+
+현재 AI Docent Context의 evidence 허용 기준은
+실제 DB 상태값과 다시 맞춰야 하는 부분이 있어,
+실제 OpenAI UI 연결 전에 정책과 코드를 함께 정리할 예정입니다.
+
+존재하지 않는 상태값을 임의로 추가하지 않습니다.
 
 Place Docent는:
 
@@ -432,9 +452,14 @@ src/
 - [x] AI Docent Prompt / Context / Structured Output
 - [x] Course / Place Docent Mock UX
 - [x] AI Docent Mock Loading / Empty / Error / Retry
+- [x] 서울 지역 Course 후보 필터
+- [x] Course 장소 추가 후보 서울 필터
+- [x] `places.region` 데이터 보강
+- [x] `places.place_description` 도입
+- [x] 도깨비 촬영지 1차 검증 데이터 보강
 - [ ] 실제 OpenAI API와 Course UI 연결
 - [ ] TTS
-- [ ] 데이터 확장 및 정제
+- [ ] 추가 작품 데이터 확장 및 남은 촬영지 정제
 - [ ] AI Course Ranking
 - [ ] 사용자 계정 / 서버 기반 코스 저장
 
