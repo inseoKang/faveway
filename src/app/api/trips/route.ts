@@ -20,6 +20,7 @@ type Place = {
   latitude: number | null;
   longitude: number | null;
   place_type: string | null;
+  region: string | null;
   is_active: boolean;
 };
 
@@ -72,6 +73,7 @@ type RouteSelectionReason =
   | "MULTIPLE_CONSTRAINTS";
 
 const MIN_STAY_MINUTES = 45;
+const COURSE_REGION = "서울";
 
 function normalizeIds(value: unknown): number[] {
   if (!Array.isArray(value)) {
@@ -483,6 +485,7 @@ export async function POST(request: NextRequest) {
             latitude,
             longitude,
             place_type,
+            region,
             is_active
           )
         `,
@@ -517,8 +520,19 @@ export async function POST(request: NextRequest) {
 
     const relations = (relationData ?? []) as unknown as PlaceRelation[];
 
+    /**
+     * 현재 FAVEWAY의 Course 범위는 서울이다.
+     *
+     * is_active = true
+     * → 현재 Course 후보로 사용할 수 있는 장소
+     *
+     * region = 서울
+     * → 현재 서비스 지역 범위에 포함되는 장소
+     */
     let candidateRelations = relations.filter(
-      (relation) => relation.places.is_active !== false,
+      (relation) =>
+        relation.places.is_active !== false &&
+        relation.places.region === COURSE_REGION,
     );
 
     if (actorIds.length > 0) {
@@ -540,8 +554,8 @@ export async function POST(request: NextRequest) {
           code: "NO_FILMING_LOCATIONS",
           message:
             actorIds.length > 0
-              ? "선택한 배우가 등장한 장면과 연결된 촬영지가 없습니다."
-              : "등록된 촬영지가 없습니다.",
+              ? "선택한 배우가 등장한 장면과 연결된 서울 촬영지가 없습니다."
+              : "등록된 서울 촬영지가 없습니다.",
         },
         {
           status: 404,
@@ -555,7 +569,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           code: "NO_COORDINATED_FILMING_LOCATIONS",
-          message: "좌표가 등록된 촬영지가 없어 코스를 생성할 수 없습니다.",
+          message:
+            "좌표가 등록된 서울 촬영지가 없어 코스를 생성할 수 없습니다.",
         },
         {
           status: 404,
@@ -644,8 +659,10 @@ export async function POST(request: NextRequest) {
         candidateSource: actorIds.length > 0 ? "ACTOR_SCENE" : "CONTENT",
 
         /**
-         * 현재 작품/배우 조건과 좌표 검증까지 통과한
-         * 실제 Course 후보 수.
+         * 현재 작품/배우 조건,
+         * 서울 지역,
+         * 활성 상태,
+         * 좌표 검증까지 통과한 실제 Course 후보 수.
          */
         candidateCount: coordinatePlaces.length,
 

@@ -276,9 +276,11 @@ Places
 ```text
 DB Candidate
 ↓
-Actor / Scene Filter
-↓
 Active Place Filter
+↓
+Region Filter
+↓
+Actor / Scene Filter
 ↓
 Deduplication
 ↓
@@ -296,6 +298,15 @@ Distance Optimization
 ↓
 Initial Course
 ```
+
+현재 Region Filter:
+
+```text
+region = 서울
+```
+
+서울 외 촬영지는 DB에서 삭제하지 않고
+현재 Course Candidate에서만 제외합니다.
 
 Course 화면에서는:
 
@@ -399,6 +410,8 @@ Next.js Route Handler는 다음 역할을 담당합니다.
 - 검증된 evidence 필터링
 - OpenAI API Key 보호
 - OpenAI 호출 여부 제어
+- 활성 장소 필터링
+- 서울 서비스 지역 필터링
 
 ---
 
@@ -518,18 +531,34 @@ Docent Context
 
 # 16. AI Docent Evidence
 
-AI에 전달하는 verified_fact는
-검증 상태를 통과한 데이터로 제한합니다.
-
-현재 허용 상태:
+현재 실제 DB의 `verification_status` 값은:
 
 ```text
-verified
-approved
-confirmed
-complete
-completed
+PUBLIC_DATA
+UNVERIFIED
 ```
+
+입니다.
+
+기존 AI Docent Context의 evidence 허용 기준과
+DB 실제 상태값 사이에 정리가 필요한 부분이 있습니다.
+
+실제 OpenAI UI 연결 전:
+
+```text
+DB verification_status
+↓
+Evidence 허용 기준 확정
+↓
+Context Filter 수정
+↓
+실제 AI 테스트
+```
+
+순서로 정리합니다.
+
+존재하지 않는 상태값을
+문서나 DB에 임의로 추가하지 않습니다.
 
 ---
 

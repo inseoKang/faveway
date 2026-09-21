@@ -122,7 +122,63 @@ Frontend는 이 값을 이용해
 
 ---
 
-## 5. 좌표 부족 정책
+## 5. 서비스 지역 범위 정책
+
+현재 FAVEWAY의 Course 범위는 서울입니다.
+
+```text
+region = 서울
++
+is_active = true
+```
+
+인 촬영지만 Course Candidate로 사용합니다.
+
+서울 외 촬영지는:
+
+```text
+DB에서 삭제하지 않음
+↓
+현재 Course에서만 제외
+```
+
+합니다.
+
+서비스 지역 밖의 데이터가 있다는 이유로
+장소를 비활성화하지 않습니다.
+
+```text
+is_active
+→ 현재 방문 가능한 장소 여부
+
+region
+→ 현재 서비스 범위 여부
+```
+
+를 분리해서 관리합니다.
+
+예:
+
+```text
+월정사
+is_active = true
+region = 강원
+↓
+데이터는 유효
+서울 Course에서는 제외
+```
+
+폐점 장소는 별도로:
+
+```text
+is_active = false
+```
+
+처리합니다.
+
+---
+
+## 6. 좌표 부족 정책
 
 ### Explore
 
@@ -144,7 +200,7 @@ Course Candidate 제외
 
 ---
 
-## 6. Scene 정보 부족 정책
+## 7. Scene 정보 부족 정책
 
 ```text
 Place 존재
@@ -164,7 +220,7 @@ Episode 추측
 
 ---
 
-## 7. Actor 기반 데이터 부족 정책
+## 8. Actor 기반 데이터 부족 정책
 
 ```text
 Actor
@@ -188,7 +244,7 @@ Empty
 
 ---
 
-## 8. 사용자 선택 기반 범위 확장
+## 9. 사용자 선택 기반 범위 확장
 
 사용자에게:
 
@@ -209,9 +265,11 @@ actorIds
 
 로 변경합니다.
 
+서울 지역 제한은 그대로 유지합니다.
+
 ---
 
-## 9. 여행 조건으로 여러 장소를 묶을 수 없는 경우
+## 10. 여행 조건으로 여러 장소를 묶을 수 없는 경우
 
 ```text
 3곳 실패
@@ -226,7 +284,7 @@ actorIds
 
 ---
 
-## 10. 일반 장소 추천 정책
+## 11. 일반 장소 추천 정책
 
 ```text
 촬영지 부족
@@ -236,7 +294,7 @@ actorIds
 
 ---
 
-## 11. AI Recommendation 데이터 부족 정책
+## 12. AI Recommendation 데이터 부족 정책
 
 ```text
 Validated Candidate IDs
@@ -257,7 +315,7 @@ AI Recommendation 구현 예정
 
 ---
 
-## 12. AI Docent 기본 정책
+## 13. AI Docent 기본 정책
 
 AI Docent는 서버가 DB에서 다시 조회한 검증 Context를 사용합니다.
 
@@ -275,7 +333,7 @@ AI Docent
 
 ---
 
-## 13. AI Docent 입력 데이터
+## 14. AI Docent 입력 데이터
 
 현재 서버 Context:
 
@@ -298,29 +356,34 @@ Travel Mood
 
 ---
 
-## 14. verified_fact 검증 정책
+## 15. verified_fact 검증 정책
 
-현재 허용 상태:
+현재 실제 DB의 `verification_status` 값은:
 
 ```text
-verified
-approved
-confirmed
-complete
-completed
+PUBLIC_DATA
+UNVERIFIED
 ```
 
-검증되지 않은 `verified_fact`는
-AI evidence로 사용하지 않습니다.
+입니다.
+
+AI Docent에서 어떤 상태를 evidence로 허용할지는
+실제 OpenAI 연결 전에 별도로 확정합니다.
+
+현재 DB에 존재하지 않는 상태값을
+정책 문서에 임의로 추가하지 않습니다.
+
+검증 상태가 확정되지 않은 `verified_fact`는
+AI evidence로 자동 사용하지 않습니다.
 
 ---
 
-## 15. AI Docent 생성 가능 기준
+## 16. AI Docent 생성 가능 기준
 
 ```text
 Scene description
 또는
-Verified verified_fact
+검증된 verified_fact
 ```
 
 둘 다 없다면:
@@ -335,7 +398,7 @@ DOCENT_CONTEXT_INSUFFICIENT
 
 ---
 
-## 16. Scene 없는 AI Docent
+## 17. Scene 없는 AI Docent
 
 Scene이 없어도
 검증된 `verified_fact`가 있다면
@@ -351,7 +414,7 @@ verified_fact 없음
 
 ---
 
-## 17. Episode 없는 경우
+## 18. Episode 없는 경우
 
 ```text
 Episode 없음
@@ -361,7 +424,7 @@ Episode 없음
 
 ---
 
-## 18. Actor 정보 부족
+## 19. Actor 정보 부족
 
 ```text
 Scene Actor 없음
@@ -370,14 +433,14 @@ Scene Actor 없음
 
 ---
 
-## 19. Source 부족 정책
+## 20. Source 부족 정책
 
 `source_url`이 없다는 이유로
 가짜 출처를 생성하지 않습니다.
 
 ---
 
-## 20. AI Docent 실제 호출 비활성화
+## 21. AI Docent 실제 호출 비활성화
 
 ```env
 ENABLE_OPENAI_DOCENT=false
@@ -396,7 +459,7 @@ DOCENT_NOT_ENABLED
 
 ---
 
-## 21. AI Docent Mock UX
+## 22. AI Docent Mock UX
 
 현재 Course 화면에서는 Mock 데이터를 사용합니다.
 
@@ -412,7 +475,7 @@ Retry
 
 ---
 
-## 22. Course Docent와 Place Docent
+## 23. Course Docent와 Place Docent
 
 ### Course Docent
 
@@ -426,9 +489,20 @@ Retry
 현장에서 도슨트 듣기
 ```
 
+PlaceDetailDialog 내부에는
+중복된 Docent CTA를 추가하지 않습니다.
+
+```text
+PlaceDetailDialog
+→ 사실 / 상세 정보
+
+DocentDialog
+→ 도슨트 경험
+```
+
 ---
 
-## 23. AI Docent Prompt 금지 사항
+## 24. AI Docent Prompt 금지 사항
 
 ```text
 DB에 없는 촬영지
@@ -449,7 +523,7 @@ Actor 추측
 
 ---
 
-## 24. AI Docent 오류 분류
+## 25. AI Docent 오류 분류
 
 ### `DOCENT_CONTEXT_NOT_FOUND`
 
@@ -475,7 +549,7 @@ Actor 추측
 
 ---
 
-## 25. TTS 정책
+## 26. TTS 정책
 
 현재 TTS는 구현하지 않았습니다.
 
@@ -493,7 +567,7 @@ TTS
 
 ---
 
-## 26. TMAP 실패 정책
+## 27. TMAP 실패 정책
 
 ```text
 TMAP 성공 구간
@@ -513,7 +587,7 @@ fallback
 
 ---
 
-## 27. 상태 분류
+## 28. 상태 분류
 
 ### Empty
 
@@ -552,34 +626,37 @@ Network Error
 
 ---
 
-## 28. 현재 정책 및 구현 상태 요약
+## 29. 현재 정책 및 구현 상태 요약
 
-| 상황 | 처리 | 구현 |
-| --- | --- | --- |
-| 촬영지 0개 | Course 생성 안 함 + Empty | 완료 |
-| 촬영지 1개 | 1개 장소 Course 허용 | 완료 |
-| 1개 장소 이유 안내 | `routeSelectionReason` | 완료 |
-| 촬영지 2개 이상 | Route 탐색 | 완료 |
-| 좌표 없음 | Explore/Detail 가능, Course 제외 | 완료 |
-| Scene 없음 | 추측하지 않음 | 완료 |
-| Episode 없음 | 표시하지 않음 | 완료 |
-| Actor Scene 관계 없음 | 배우 장소로 추측하지 않음 | 완료 |
-| 배우 후보 부족 | 사용자 선택 시 배우 조건 제거 | 완료 |
-| 자동 범위 확장 | 수행하지 않음 | 완료 |
-| TMAP 실패 | Haversine fallback | 완료 |
-| 일반 장소 자동 추가 | 하지 않음 | 완료 |
-| AI Recommendation | DB Candidate 안에서만 선택 | 구현 예정 |
-| AI Docent 서버 기반 | DB Context → LLM 구조 | 완료 |
-| Place / Course Docent API | Route Handler | 완료 |
-| AI Prompt 정책 | 사실 생성 및 배우 사칭 제한 | 완료 |
-| AI 입력 근거 부족 | Docent 생성 제한 | 완료 |
-| AI Docent Mock UX | Loading / Success / Empty / Error / Retry | 완료 |
-| 실제 OpenAI UI 연결 | Mock → 실제 API 교체 | 예정 |
-| TTS | 텍스트 검증 후 연결 | 예정 |
+| 상황                       | 처리                                      | 구현      |
+| -------------------------- | ----------------------------------------- | --------- |
+| 촬영지 0개                 | Course 생성 안 함 + Empty                 | 완료      |
+| 촬영지 1개                 | 1개 장소 Course 허용                      | 완료      |
+| 1개 장소 이유 안내         | `routeSelectionReason`                    | 완료      |
+| 촬영지 2개 이상            | Route 탐색                                | 완료      |
+| 서울 외 장소               | DB 유지, Course 제외                      | 완료      |
+| 비활성 장소                | Course 제외                               | 완료      |
+| 좌표 없음                  | Explore/Detail 가능, Course 제외          | 완료      |
+| Scene 없음                 | 추측하지 않음                             | 완료      |
+| Episode 없음               | 표시하지 않음                             | 완료      |
+| Actor Scene 관계 없음      | 배우 장소로 추측하지 않음                 | 완료      |
+| 배우 후보 부족             | 사용자 선택 시 배우 조건 제거             | 완료      |
+| 자동 범위 확장             | 수행하지 않음                             | 완료      |
+| TMAP 실패                  | Haversine fallback                        | 완료      |
+| 일반 장소 자동 추가        | 하지 않음                                 | 완료      |
+| AI Recommendation          | DB Candidate 안에서만 선택                | 구현 예정 |
+| AI Docent 서버 기반        | DB Context → LLM 구조                     | 완료      |
+| Place / Course Docent API  | Route Handler                             | 완료      |
+| AI Prompt 정책             | 사실 생성 및 배우 사칭 제한               | 완료      |
+| AI 입력 근거 부족          | Docent 생성 제한                          | 완료      |
+| AI Docent Mock UX          | Loading / Success / Empty / Error / Retry | 완료      |
+| 실제 DB Evidence 정책 정리 | `PUBLIC_DATA` / `UNVERIFIED` 기준 재정의  | 예정      |
+| 실제 OpenAI UI 연결        | Mock → 실제 API 교체                      | 예정      |
+| TTS                        | 텍스트 검증 후 연결                       | 예정      |
 
 ---
 
-## 29. 핵심 원칙
+## 30. 핵심 원칙
 
 ### 1. 없는 장소를 만들지 않는다
 
@@ -595,7 +672,15 @@ Scene 없음
 → 추측하지 않음
 ```
 
-### 3. 데이터 부족과 시스템 오류를 구분한다
+### 3. 서비스 범위 밖 데이터는 삭제하지 않는다
+
+```text
+서울 외 Place
+→ DB 유지
+→ 현재 Course에서 제외
+```
+
+### 4. 데이터 부족과 시스템 오류를 구분한다
 
 ```text
 No Data
@@ -603,7 +688,7 @@ No Data
 Error
 ```
 
-### 4. AI는 검증된 정보를 설명한다
+### 5. AI는 검증된 정보를 설명한다
 
 ```text
 DB Fact

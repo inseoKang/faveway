@@ -43,6 +43,7 @@ Scene 관계를 별도로 관리합니다.
 ```text
 id
 name
+created_at
 ```
 
 배우 Entity입니다.
@@ -57,6 +58,7 @@ title
 media_type
 release_year
 description
+created_at
 ```
 
 드라마 / 영화 콘텐츠 Entity입니다.
@@ -66,8 +68,8 @@ description
 ## `content_actors`
 
 ```text
-actor_id
 content_id
+actor_id
 character_name
 ```
 
@@ -82,12 +84,24 @@ id
 content_id
 episode
 description
+raw_description
+created_at
 ```
 
 작품의 Scene 정보입니다.
 
+역할:
+
+```text
+description
+→ 서비스에서 사용하는 정리된 장면 설명
+
+raw_description
+→ 원본 데이터에서 가져온 장면 설명
+```
+
 장면 정보가 확인되지 않은 경우
-존재하지 않는 설명을 임의 생성하지 않습니다.
+존재하지 않는 설명이나 Episode를 임의 생성하지 않습니다.
 
 ---
 
@@ -96,6 +110,7 @@ description
 ```text
 scene_id
 actor_id
+character_name
 ```
 
 특정 Scene에 실제 등장한 배우 관계입니다.
@@ -123,9 +138,79 @@ latitude
 longitude
 place_type
 is_active
+created_at
+region
+place_description
 ```
 
 실제 장소 Entity입니다.
+
+### `region`
+
+현재 서비스 지역 범위를 명시적으로 관리합니다.
+
+현재 예:
+
+```text
+서울
+인천
+강원
+전남
+```
+
+FAVEWAY의 초기 Course 범위는 서울이므로:
+
+```text
+region = 서울
++
+is_active = true
+```
+
+인 장소를 Course 후보로 사용합니다.
+
+서울 외 장소는 DB에서 삭제하지 않고 유지합니다.
+
+---
+
+### `place_description`
+
+실제 장소 자체에 대한 설명입니다.
+
+```text
+scene.description
+→ 작품 속에서 어떤 장면인가
+
+places.place_description
+→ 현실에서 이곳은 어떤 장소인가
+
+place_relations.verified_fact
+→ 작품과 장소의 촬영 관계를 뒷받침하는 검증 사실
+```
+
+세 정보의 책임을 분리합니다.
+
+`place_description`도 근거 없이 생성하지 않습니다.
+
+현재는 출처가 충분히 확인된 장소부터 순차적으로 보강합니다.
+
+---
+
+### `place_type`
+
+현재 DB 상태:
+
+```text
+NULL
+playground
+```
+
+기존 일부 데이터의 `playground` 값이
+실제 장소 유형과 일치하지 않는 경우가 확인되었습니다.
+
+따라서 현재 `place_type`은
+Course 또는 AI Docent의 신뢰 데이터로 사용하지 않습니다.
+
+추후 분류 기준을 정의한 뒤 정제합니다.
 
 ---
 
@@ -134,23 +219,45 @@ is_active
 작품과 장소의 기본 관계와
 촬영지 검증 정보를 관리합니다.
 
-주요 정보:
+현재 실제 컬럼:
 
 ```text
+id
 content_id
+actor_id
+scene_id
 place_id
 relation_type
 verification_status
-verified_fact
+source_type
 source_url
+verified_fact
+verified_at
+created_at
 ```
 
-현재 서비스에서는 추가 검증 메타데이터로 다음 정보도 사용합니다.
+현재 데이터에서는
+Scene / Actor 단위로 같은 작품 + 장소 관계가 여러 행 존재할 수 있습니다.
+
+예:
 
 ```text
-source_type
-verified_at
+도깨비 + 운현궁 양관 + Scene 4 + Actor A
+도깨비 + 운현궁 양관 + Scene 4 + Actor B
+도깨비 + 운현궁 양관 + Scene 4 + Actor C
 ```
+
+이 때문에:
+
+```text
+content_id + place_id
+```
+
+만 기준으로 보면 중복처럼 보일 수 있지만,
+현재 구조에서는 Scene / Actor 관계를 함께 저장하면서 발생한 반복입니다.
+
+장기적으로 검증 정보를 별도 구조로 분리할 수 있지만,
+현재 서비스와 API 호환성을 위해 기존 구조를 유지합니다.
 
 ---
 
@@ -239,7 +346,7 @@ Actor
 동일 작품과 동일 장소가 여러 Scene이나 관계로 인해
 반복 조회될 수 있습니다.
 
-현재 다음 조합을 기준으로 중복을 제거합니다.
+현재 UI / API에서는 다음 조합을 기준으로 중복을 제거합니다.
 
 ```text
 content_id + place_id
@@ -271,15 +378,59 @@ content_id + place_id
 
 ```text
 is_active = true
-→ Candidate 가능
+→ 현재 Course Candidate 가능
 
 is_active = false
-→ Candidate 제외
+→ Course Candidate 제외
 ```
+
+촬영지 기록 자체를 삭제한다는 의미는 아닙니다.
+
+예:
+
+```text
+과거 촬영지
++
+현재 폐점
+↓
+Scene / 촬영지 기록 유지
+is_active = false
+```
+
+달콤커피 종로종각점은
+현재 방문 후보에서 제외하기 위해
+`is_active = false`로 관리합니다.
 
 ---
 
-# 8. 좌표
+# 8. 서비스 지역
+
+현재 FAVEWAY의 Course 범위는 서울입니다.
+
+Course 후보 조건:
+
+```text
+is_active = true
++
+region = 서울
++
+좌표 존재
+```
+
+서울 외 촬영지는 DB에서 삭제하지 않습니다.
+
+```text
+서울 외 장소
+→ 데이터 보존
+→ 현재 Course에서는 제외
+```
+
+향후 서비스 범위가 확장되면
+`region` 기준을 이용해 후보 범위를 넓힐 수 있습니다.
+
+---
+
+# 9. 좌표
 
 Course 생성과 지도 표시를 위해
 다음 좌표를 사용합니다.
@@ -290,14 +441,14 @@ longitude
 ```
 
 Course 후보 생성 시
-좌표가 없는 장소는 Route 계산 대상에서 제외할 수 있습니다.
+좌표가 없는 장소는 Route 계산 대상에서 제외합니다.
 
 Place Detail에서는 좌표가 없는 경우
 주소 검색 기반 이동 링크 fallback을 사용할 수 있습니다.
 
 ---
 
-# 9. 데이터 검증
+# 10. 데이터 검증
 
 주요 검증 정보:
 
@@ -325,7 +476,136 @@ verified_at
 
 ---
 
-# 10. Scene 정보가 없는 경우
+# 11. verification_status
+
+현재 실제 DB에서 확인된 값:
+
+```text
+PUBLIC_DATA
+UNVERIFIED
+```
+
+### `PUBLIC_DATA`
+
+공공데이터를 기반으로 등록된 관계입니다.
+
+현재 도깨비 일부 촬영지는
+한국문화정보원 미디어콘텐츠 영상 촬영지 데이터를 근거로 사용합니다.
+
+### `UNVERIFIED`
+
+기존 데이터에는 존재하지만
+FAVEWAY에서 공공데이터 수준의 검증 완료 상태로 분류하지 않은 관계입니다.
+
+`source_url`이나 `verified_fact`가 추가되었더라도
+자동으로 `PUBLIC_DATA`로 변경하지 않습니다.
+
+---
+
+# 12. source_type
+
+현재 사용하는 값:
+
+```text
+KCCF_PUBLIC_DATA
+OFFICIAL
+SECONDARY
+USER_PROVIDED_CSV
+```
+
+### `KCCF_PUBLIC_DATA`
+
+한국문화정보원 등 기존 공공데이터 출처입니다.
+
+### `OFFICIAL`
+
+서울시, 공공기관, 장소 공식 사이트 등
+공식 출처를 사용한 경우입니다.
+
+### `SECONDARY`
+
+언론,
+촬영지 전문 데이터베이스,
+촬영지 / 여행 정보 사이트 등
+2차 출처를 사용한 경우입니다.
+
+### `USER_PROVIDED_CSV`
+
+기존 CSV에서 가져온 데이터로,
+추가 외부 검증 전 상태를 의미합니다.
+
+새로운 검증 출처를 확보하면
+현재 `source_url`의 성격에 맞게
+`source_type`을 업데이트합니다.
+
+---
+
+# 13. verified_at
+
+```text
+verified_at
+→ FAVEWAY에서 해당 근거를 확인한 시점
+```
+
+원문 기사 작성일이나
+촬영 날짜를 의미하지 않습니다.
+
+---
+
+# 14. 현재 도깨비 데이터 점검 결과
+
+도깨비:
+
+```text
+content_id = 1
+```
+
+Scene:
+
+```text
+총 32개
+scene description 누락 0
+raw_description 누락 0
+Episode 누락 1
+Scene Actor 없는 Scene 0
+Scene Place 없는 Scene 0
+```
+
+Episode가 확인되지 않은 Scene은
+추측해서 채우지 않고 `NULL`을 유지합니다.
+
+---
+
+## 서울 촬영지
+
+현재 도깨비 서울 촬영지:
+
+```text
+총 19곳
+활성 18곳
+비활성 1곳
+```
+
+검증 정보:
+
+```text
+verified_fact
++
+source_url
++
+verified_at
+```
+
+이 모두 보강된 서울 촬영지는
+현재 14곳입니다.
+
+`place_description`은
+공식 또는 신뢰 가능한 설명 근거가 확보된 장소부터
+순차적으로 보강하고 있습니다.
+
+---
+
+# 15. Scene 정보가 없는 경우
 
 촬영 장소라는 사실은 확인됐지만
 구체적인 Scene 정보가 없는 데이터가 존재할 수 있습니다.
@@ -349,7 +629,7 @@ UI에서 추측한 장면 표시
 
 ---
 
-# 11. DB와 AI의 책임 분리
+# 16. DB와 AI의 책임 분리
 
 DB:
 
@@ -361,6 +641,8 @@ DB:
 관계
 검증 정보
 출처
+지역
+실제 장소 설명
 ```
 
 AI:
@@ -374,13 +656,50 @@ Docent 생성
 
 ---
 
-# 12. 향후 개선
+# 17. AI Docent Evidence 상태 주의
 
+현재 DB의 실제 `verification_status`는:
+
+```text
+PUBLIC_DATA
+UNVERIFIED
+```
+
+입니다.
+
+기존 AI Docent Context 코드와 문서에는
+과거 임시 상태값을 기준으로 한 evidence filter가 남아 있을 수 있습니다.
+
+따라서 실제 OpenAI UI 연결 전:
+
+```text
+DB 실제 verification_status
+↓
+AI Evidence 허용 기준 확정
+↓
+docent-context 코드 수정
+↓
+실제 AI 테스트
+```
+
+순서로 정리해야 합니다.
+
+존재하지 않는 상태값을 임의로 추가하지 않습니다.
+
+---
+
+# 18. 향후 개선
+
+- 남은 도깨비 촬영지 검증 보강
+- `place_description` 확대
+- `place_type` 분류 기준 재정의
 - 동일 실제 장소 + 여러 작품 관계의 장소 중심 통합
 - Actor / Scene 데이터 확대
-- Verification 상태 정교화
+- Verification 상태 정책 확정
 - source 관리 방식 고도화
+- 검증 정보 별도 테이블 분리 검토
 - 데이터 정규화 자동화
 - ETL 자동화
 - 폐업 / 이전 장소 검증
 - 좌표 검증 자동화
+- 추가 작품 2~3개 데이터 구축
