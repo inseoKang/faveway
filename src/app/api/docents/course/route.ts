@@ -101,8 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           code: "DOCENT_CONTEXT_NOT_FOUND",
-          message:
-            "코스에 포함된 일부 촬영지의 검증 정보를 찾지 못했습니다.",
+          message: "코스에 포함된 일부 촬영지의 검증 정보를 찾지 못했습니다.",
         },
         {
           status: 404,
@@ -124,7 +123,7 @@ export async function POST(request: NextRequest) {
         {
           code: "DOCENT_CONTEXT_INSUFFICIENT",
           message:
-            "아직 코스 도슨트를 만들 만큼 충분한 장면 정보가 준비되지 않았어요.",
+            "아직 코스 도슨트를 만들 만큼 충분한 장면 정보나 촬영 관계 근거가 준비되지 않았어요.",
         },
         {
           status: 422,

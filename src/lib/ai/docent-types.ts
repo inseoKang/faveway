@@ -13,9 +13,10 @@ export type DocentScene = {
 };
 
 export type DocentEvidence = {
-  verificationStatus: string;
+  // Only PUBLIC_DATA facts enter the generation context.
+  verificationStatus: "PUBLIC_DATA";
   sourceType: string | null;
-  verifiedFact: string | null;
+  verifiedFact: string;
 };
 
 export type PlaceDocentContext = {
