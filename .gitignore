@@ -45,7 +45,8 @@ next-env.d.ts
 .env.local
 
 # Raw datasets
-data/raw/*.csv
+data/raw/blog/*.csv
+data/raw/kccf/*.csv
 
 # Python
 .venv/
