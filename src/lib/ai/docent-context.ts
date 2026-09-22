@@ -24,27 +24,23 @@ type ActorRow = {
 };
 
 type EvidenceRow = {
-  verification_status: string;
+  verification_status: string | null;
   source_type: string | null;
   verified_fact: string | null;
 };
 
-const VERIFIED_STATUSES = [
-  "verified",
-  "approved",
-  "confirmed",
-  "complete",
-  "completed",
-];
-
-function isVerifiedStatus(status: string) {
-  return VERIFIED_STATUSES.includes(status.trim().toLowerCase());
-}
-
-function hasMeaningfulEvidence(evidence: EvidenceRow) {
+// Only public-data facts are eligible for narration evidence.
+// Scene descriptions remain a separate input, not verified by this status.
+function hasMeaningfulEvidence(
+  evidence: EvidenceRow,
+): evidence is EvidenceRow & {
+  verification_status: "PUBLIC_DATA";
+  verified_fact: string;
+} {
   return (
-    isVerifiedStatus(evidence.verification_status) &&
-    Boolean(evidence.verified_fact?.trim())
+    evidence.verification_status === "PUBLIC_DATA" &&
+    typeof evidence.verified_fact === "string" &&
+    evidence.verified_fact.trim().length > 0
   );
 }
 
@@ -76,11 +72,7 @@ export async function loadPlaceDocentContext(
         .eq("id", placeId)
         .maybeSingle(),
 
-      db
-        .from("contents")
-        .select("id,title")
-        .eq("id", contentId)
-        .maybeSingle(),
+      db.from("contents").select("id,title").eq("id", contentId).maybeSingle(),
 
       db.from("scene_places").select("scene_id").eq("place_id", placeId),
 
@@ -206,7 +198,7 @@ export async function loadPlaceDocentContext(
     .map((row) => ({
       verificationStatus: row.verification_status,
       sourceType: row.source_type,
-      verifiedFact: row.verified_fact,
+      verifiedFact: row.verified_fact.trim(),
     }));
 
   return {
