@@ -49,6 +49,8 @@ KCCF / Blog 출처 병합
 ↓  
 검수 후보 생성  
 ↓  
+검수 이유 및 비교 대상 생성  
+↓  
 수동 검수  
 ↓  
 Supabase Import
@@ -86,6 +88,15 @@ Supabase Import
 
 `outputs/data-expansion/content_place_review.csv`
 
+Candidate Output의 기본 정보에 다음 검수 컨텍스트가 추가됩니다.
+
+- `review_reason`
+- `matched_place_name`
+- `matched_address`
+- `matched_source`
+- `distance_meters`
+- `recommended_action`
+
 현재 검수 기준:
 
 - 동일 작품에서 동일 장소명이 여러 주소로 존재하는 경우
@@ -93,6 +104,65 @@ Supabase Import
 - 동일 작품에서 좌표가 동일하거나 매우 가까운 경우
 - 서울 주소 형식이 불완전한 경우
 - KCCF와 Blog 두 출처에서 동시에 확인된 경우
+
+## Review Context
+
+`review_reason`은 해당 후보가 검수 대상으로 선택된 이유를 나타냅니다.
+
+현재 사용되는 주요 값:
+
+- `SAME_PLACE_NAME`
+- `COORDINATE_DUPLICATE`
+- `NEARBY_CROSS_SOURCE`
+- `MULTI_SOURCE`
+- `ADDRESS_NEEDS_REVIEW`
+
+여러 조건에 동시에 해당하는 경우 `|`로 연결합니다.
+
+예:
+
+`SAME_PLACE_NAME|NEARBY_CROSS_SOURCE`
+
+`matched_place_name`, `matched_address`, `matched_source`는
+현재 후보와 비교할 가치가 가장 높은 다른 후보의 정보를 제공합니다.
+
+`distance_meters`는 두 후보의 좌표 사이 직선거리를 미터 단위로 나타냅니다.
+
+이 정보는 자동 병합 기준이 아니라 사람이 검수하기 위한 참고 정보입니다.
+
+## Recommended Action
+
+`recommended_action`은 수동 검수 시 먼저 확인할 작업을 나타냅니다.
+
+### `CHECK_MERGE`
+
+동일 장소이거나 하나의 장소로 병합할 가능성이 있는 후보입니다.
+
+자동 병합하지 않고 장소명, 주소, 출처를 확인한 뒤 판단합니다.
+
+### `CHECK_NEARBY`
+
+서로 다른 출처의 후보가 가까운 거리에 있습니다.
+
+동일 장소인지, 같은 지역의 서로 다른 촬영 포인트인지 확인합니다.
+
+### `CHECK_COORDINATES`
+
+장소명이나 주소는 다르지만 좌표가 동일하거나 매우 가깝습니다.
+
+원천 데이터의 좌표 정확성을 확인합니다.
+
+### `CHECK_ADDRESS`
+
+서울 주소 형식이 불완전하거나 주소 정보에 추가 검토가 필요합니다.
+
+### `VERIFY_SOURCE`
+
+KCCF와 Blog 두 출처에서 모두 확인된 후보입니다.
+
+복수 출처 존재만으로 검증 완료 처리하지 않고 촬영 관계와 출처 내용을 확인합니다.
+
+`recommended_action`은 자동 처리 명령이 아니라 검수 방향을 제안하는 참고 정보입니다.
 
 ## Review Priority
 
@@ -230,6 +300,14 @@ Scene과 Place의 관계가 확인되지 않은 경우 배우 기반 촬영지�
 - 좌표 중복 후보: 8개
 - 주소 검토 필요: 1개
 
+현재 검수 액션 분포:
+
+- `CHECK_NEARBY`: 69개
+- `VERIFY_SOURCE`: 59개
+- `CHECK_MERGE`: 32개
+- `CHECK_COORDINATES`: 6개
+- `CHECK_ADDRESS`: 1개
+
 현재 결과는 최종 서비스 데이터가 아니라 검수 전 후보 데이터입니다.
 
 ## Import Flow
@@ -249,6 +327,8 @@ Merge Sources
 Generate Candidates  
 ↓  
 Generate Review Candidates  
+↓  
+Add Review Context  
 ↓  
 Manual Review  
 ↓  

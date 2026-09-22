@@ -370,14 +370,11 @@ def add_coordinate_flags(
 
         for i in range(len(indices)):
             index_a = indices[i]
-
             row_a = result.loc[index_a]
 
             if (
                 pd.isna(row_a["latitude"])
-                or pd.isna(
-                    row_a["longitude"]
-                )
+                or pd.isna(row_a["longitude"])
             ):
                 continue
 
@@ -386,41 +383,20 @@ def add_coordinate_flags(
                 len(indices),
             ):
                 index_b = indices[j]
-
                 row_b = result.loc[index_b]
 
                 if (
-                    pd.isna(
-                        row_b["latitude"]
-                    )
-                    or pd.isna(
-                        row_b["longitude"]
-                    )
+                    pd.isna(row_b["latitude"])
+                    or pd.isna(row_b["longitude"])
                 ):
                     continue
 
                 distance = (
                     haversine_distance_meters(
-                        float(
-                            row_a[
-                                "latitude"
-                            ]
-                        ),
-                        float(
-                            row_a[
-                                "longitude"
-                            ]
-                        ),
-                        float(
-                            row_b[
-                                "latitude"
-                            ]
-                        ),
-                        float(
-                            row_b[
-                                "longitude"
-                            ]
-                        ),
+                        float(row_a["latitude"]),
+                        float(row_a["longitude"]),
+                        float(row_b["latitude"]),
+                        float(row_b["longitude"]),
                     )
                 )
 
@@ -493,6 +469,212 @@ def calculate_review_priority(
         return "MEDIUM"
 
     return "LOW"
+
+
+def get_source_label(
+    row: pd.Series,
+) -> str:
+    if (
+        row["kccf_exists"]
+        and row["blog_exists"]
+    ):
+        return "KCCF|BLOG"
+
+    if row["kccf_exists"]:
+        return "KCCF"
+
+    if row["blog_exists"]:
+        return "BLOG"
+
+    return ""
+
+
+def get_distance_between_rows(
+    row_a: pd.Series,
+    row_b: pd.Series,
+) -> float | None:
+    if (
+        pd.isna(row_a["latitude"])
+        or pd.isna(row_a["longitude"])
+        or pd.isna(row_b["latitude"])
+        or pd.isna(row_b["longitude"])
+    ):
+        return None
+
+    return haversine_distance_meters(
+        float(row_a["latitude"]),
+        float(row_a["longitude"]),
+        float(row_b["latitude"]),
+        float(row_b["longitude"]),
+    )
+
+
+def is_cross_source_pair(
+    row_a: pd.Series,
+    row_b: pd.Series,
+) -> bool:
+    return (
+        (
+            row_a["kccf_exists"]
+            and row_b["blog_exists"]
+        )
+        or (
+            row_a["blog_exists"]
+            and row_b["kccf_exists"]
+        )
+    )
+
+
+def find_best_match(
+    row: pd.Series,
+    group: pd.DataFrame,
+) -> tuple[
+    pd.Series | None,
+    float | None,
+    list[str],
+]:
+    best_row = None
+    best_distance = None
+    best_reasons: list[str] = []
+    best_rank = 999
+
+    for other_index, other in group.iterrows():
+        if other_index == row.name:
+            continue
+
+        reasons: list[str] = []
+
+        same_place_name = (
+            normalize_place_name(
+                row["place_name"]
+            )
+            == normalize_place_name(
+                other["place_name"]
+            )
+        )
+
+        if same_place_name:
+            reasons.append(
+                "SAME_PLACE_NAME"
+            )
+
+        distance = (
+            get_distance_between_rows(
+                row,
+                other,
+            )
+        )
+
+        coordinate_duplicate = (
+            distance is not None
+            and distance
+            <= COORDINATE_DUPLICATE_METERS
+        )
+
+        nearby_cross_source = (
+            distance is not None
+            and distance
+            <= NEARBY_DISTANCE_METERS
+            and is_cross_source_pair(
+                row,
+                other,
+            )
+        )
+
+        if coordinate_duplicate:
+            reasons.append(
+                "COORDINATE_DUPLICATE"
+            )
+
+        if nearby_cross_source:
+            reasons.append(
+                "NEARBY_CROSS_SOURCE"
+            )
+
+        if not reasons:
+            continue
+
+        if coordinate_duplicate:
+            rank = 1
+        elif same_place_name:
+            rank = 2
+        elif nearby_cross_source:
+            rank = 3
+        else:
+            rank = 999
+
+        should_replace = (
+            rank < best_rank
+            or (
+                rank == best_rank
+                and distance is not None
+                and (
+                    best_distance is None
+                    or distance
+                    < best_distance
+                )
+            )
+        )
+
+        if should_replace:
+            best_row = other
+            best_distance = distance
+            best_reasons = reasons
+            best_rank = rank
+
+    return (
+        best_row,
+        best_distance,
+        best_reasons,
+    )
+
+
+def determine_recommended_action(
+    row: pd.Series,
+    matched_row: pd.Series | None,
+    matched_reasons: list[str],
+) -> str:
+    if (
+        row["address_quality"]
+        == "NEEDS_REVIEW"
+    ):
+        return "CHECK_ADDRESS"
+
+    if (
+        "COORDINATE_DUPLICATE"
+        in matched_reasons
+    ):
+        if (
+            matched_row is not None
+            and normalize_place_name(
+                row["place_name"]
+            )
+            == normalize_place_name(
+                matched_row[
+                    "place_name"
+                ]
+            )
+        ):
+            return "CHECK_MERGE"
+
+        return "CHECK_COORDINATES"
+
+    if (
+        "SAME_PLACE_NAME"
+        in matched_reasons
+    ):
+        return "CHECK_MERGE"
+
+    if (
+        "NEARBY_CROSS_SOURCE"
+        in matched_reasons
+    ):
+        return "CHECK_NEARBY"
+
+    if row["source_count"] == 2:
+        return "VERIFY_SOURCE"
+
+    return "REVIEW"
 
 
 def build_candidates() -> pd.DataFrame:
@@ -696,12 +878,151 @@ def build_review_candidates(
         )
     )
 
-    return (
+    review = (
         candidates[
             review_mask
         ]
         .copy()
-        .reset_index(drop=True)
+    )
+
+    review[
+        "review_reason"
+    ] = ""
+
+    review[
+        "matched_place_name"
+    ] = ""
+
+    review[
+        "matched_address"
+    ] = ""
+
+    review[
+        "matched_source"
+    ] = ""
+
+    review[
+        "distance_meters"
+    ] = pd.NA
+
+    review[
+        "recommended_action"
+    ] = ""
+
+    for index, row in review.iterrows():
+        content_group = candidates[
+            candidates[
+                "content_title"
+            ]
+            == row[
+                "content_title"
+            ]
+        ]
+
+        matched_row, distance, matched_reasons = (
+            find_best_match(
+                row,
+                content_group,
+            )
+        )
+
+        reasons = list(
+            matched_reasons
+        )
+
+        if row["source_count"] == 2:
+            reasons.append(
+                "MULTI_SOURCE"
+            )
+
+        if (
+            row["address_quality"]
+            == "NEEDS_REVIEW"
+        ):
+            reasons.append(
+                "ADDRESS_NEEDS_REVIEW"
+            )
+
+        reasons = list(
+            dict.fromkeys(reasons)
+        )
+
+        review.loc[
+            index,
+            "review_reason",
+        ] = "|".join(reasons)
+
+        if matched_row is not None:
+            review.loc[
+                index,
+                "matched_place_name",
+            ] = matched_row[
+                "place_name"
+            ]
+
+            review.loc[
+                index,
+                "matched_address",
+            ] = matched_row[
+                "address"
+            ]
+
+            review.loc[
+                index,
+                "matched_source",
+            ] = get_source_label(
+                matched_row
+            )
+
+        if distance is not None:
+            review.loc[
+                index,
+                "distance_meters",
+            ] = round(
+                distance,
+                1,
+            )
+
+        review.loc[
+            index,
+            "recommended_action",
+        ] = determine_recommended_action(
+            row,
+            matched_row,
+            matched_reasons,
+        )
+
+    review = review[
+        [
+            "content_title",
+            "place_name",
+            "address",
+            "latitude",
+            "longitude",
+            "region",
+            "kccf_exists",
+            "blog_exists",
+            "actor_data_exists",
+            "source_count",
+            "has_coordinates",
+            "duplicate_name_candidate",
+            "nearby_cross_source_candidate",
+            "coordinate_duplicate_candidate",
+            "address_quality",
+            "review_priority",
+            "review_reason",
+            "matched_place_name",
+            "matched_address",
+            "matched_source",
+            "distance_meters",
+            "recommended_action",
+            "review_status",
+            "review_note",
+        ]
+    ]
+
+    return review.reset_index(
+        drop=True
     )
 
 
@@ -815,6 +1136,27 @@ def print_summary(
         "- 주소 검토 필요: "
         f"{int((candidates['address_quality'] == 'NEEDS_REVIEW').sum())}"
     )
+
+    print()
+
+    if not review_candidates.empty:
+        print(
+            "Recommended actions:"
+        )
+
+        action_counts = (
+            review_candidates[
+                "recommended_action"
+            ]
+            .value_counts()
+        )
+
+        for action, count in (
+            action_counts.items()
+        ):
+            print(
+                f"- {action}: {count}"
+            )
 
 
 def main() -> None:
