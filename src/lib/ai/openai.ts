@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-const DEFAULT_DOCENT_MODEL = "gpt-5.6-luna";
+const DEFAULT_DOCENT_MODEL = "gpt-5-mini";
 
 export function createOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -15,7 +15,5 @@ export function createOpenAIClient() {
 }
 
 export function getDocentModel() {
-  return (
-    process.env.OPENAI_DOCENT_MODEL?.trim() || DEFAULT_DOCENT_MODEL
-  );
+  return process.env.OPENAI_DOCENT_MODEL?.trim() || DEFAULT_DOCENT_MODEL;
 }

@@ -41,8 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 # Environment
-.env
-.env.local
+.env*
+!.env.example
 
 # Raw datasets
 data/raw/blog/*.csv

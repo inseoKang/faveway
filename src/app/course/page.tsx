@@ -2037,7 +2037,6 @@ function CourseContent() {
       {docentTarget && (
         <DocentDialog
           mode={docentTarget.mode}
-          courseTitle={title || "나의 여행 코스"}
           stops={docentStops}
           placeStop={
             docentTarget.mode === "place"
