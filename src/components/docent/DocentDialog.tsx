@@ -2,18 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  createMockCourseDocent,
-  createMockPlaceDocent,
-  type DocentMockStop,
-  type MockDocentResult,
-} from "@/lib/ai/docent-mock";
+import type { DocentMockStop, MockDocentResult } from "@/lib/ai/docent-mock";
 
 type DocentMode = "course" | "place";
 
 type Props = {
   mode: DocentMode;
-  courseTitle: string;
   stops: DocentMockStop[];
   placeStop?: DocentMockStop | null;
   onClose: () => void;
@@ -21,9 +15,32 @@ type Props = {
 
 type LoadState = "loading" | "success" | "empty" | "error";
 
+type DocentApiError = {
+  code?: string;
+  message?: string;
+};
+
+type DocentApiResponse = {
+  data?: {
+    title: string;
+    narration: string;
+  };
+  code?: string;
+  message?: string;
+};
+
+async function readResponseBody(
+  response: Response,
+): Promise<DocentApiResponse> {
+  try {
+    return (await response.json()) as DocentApiResponse;
+  } catch {
+    return {};
+  }
+}
+
 export default function DocentDialog({
   mode,
-  courseTitle,
   stops,
   placeStop,
   onClose,
@@ -35,6 +52,101 @@ export default function DocentDialog({
   const [docent, setDocent] = useState<MockDocentResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const loadPlaceDocent = useCallback(
+    async (stop: DocentMockStop): Promise<MockDocentResult | null> => {
+      const response = await fetch("/api/docents/place", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contentId: stop.contentId,
+          placeId: stop.placeId,
+          language: "ko",
+        }),
+      });
+
+      const body = await readResponseBody(response);
+
+      if (
+        response.status === 422 &&
+        body.code === "DOCENT_CONTEXT_INSUFFICIENT"
+      ) {
+        return null;
+      }
+
+      if (!response.ok) {
+        const error: DocentApiError = body;
+
+        throw new Error(
+          error.message ??
+            "AI 도슨트를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      if (!body.data?.title || !body.data.narration) {
+        throw new Error("AI 도슨트 응답을 확인하지 못했습니다.");
+      }
+
+      return {
+        title: body.data.title,
+        narration: body.data.narration,
+      };
+    },
+    [],
+  );
+
+  const loadCourseDocent = useCallback(
+    async (courseStops: DocentMockStop[]): Promise<MockDocentResult | null> => {
+      if (courseStops.length === 0) {
+        return null;
+      }
+
+      const response = await fetch("/api/docents/course", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stops: courseStops.map((stop) => ({
+            contentId: stop.contentId,
+            placeId: stop.placeId,
+            order: stop.order,
+          })),
+          language: "ko",
+        }),
+      });
+
+      const body = await readResponseBody(response);
+
+      if (
+        response.status === 422 &&
+        body.code === "DOCENT_CONTEXT_INSUFFICIENT"
+      ) {
+        return null;
+      }
+
+      if (!response.ok) {
+        const error: DocentApiError = body;
+
+        throw new Error(
+          error.message ??
+            "코스 AI 도슨트를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      if (!body.data?.title || !body.data.narration) {
+        throw new Error("코스 AI 도슨트 응답을 확인하지 못했습니다.");
+      }
+
+      return {
+        title: body.data.title,
+        narration: body.data.narration,
+      };
+    },
+    [],
+  );
+
   const loadDocent = useCallback(async () => {
     setState("loading");
     setDocent(null);
@@ -43,9 +155,9 @@ export default function DocentDialog({
     try {
       const result =
         mode === "course"
-          ? await createMockCourseDocent(stops, courseTitle)
+          ? await loadCourseDocent(stops)
           : placeStop
-            ? await createMockPlaceDocent(placeStop)
+            ? await loadPlaceDocent(placeStop)
             : null;
 
       if (!result) {
@@ -64,11 +176,11 @@ export default function DocentDialog({
 
       setState("error");
     }
-  }, [courseTitle, mode, placeStop, stops]);
+  }, [loadCourseDocent, loadPlaceDocent, mode, placeStop, stops]);
 
   useEffect(() => {
     previousActiveElementRef.current =
-        document.activeElement instanceof HTMLElement
+      document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
 
@@ -77,17 +189,17 @@ export default function DocentDialog({
     closeButtonRef.current?.focus();
 
     const loadTimer = window.setTimeout(() => {
-        void loadDocent();
+      void loadDocent();
     }, 0);
 
     return () => {
-        window.clearTimeout(loadTimer);
+      window.clearTimeout(loadTimer);
 
-        document.body.style.overflow = "";
+      document.body.style.overflow = "";
 
-        previousActiveElementRef.current?.focus();
+      previousActiveElementRef.current?.focus();
     };
-    }, [loadDocent]);
+  }, [loadDocent]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -103,8 +215,7 @@ export default function DocentDialog({
     };
   }, [onClose]);
 
-  const eyebrow =
-    mode === "course" ? "COURSE AI DOCENT" : "PLACE AI DOCENT";
+  const eyebrow = mode === "course" ? "COURSE AI DOCENT" : "PLACE AI DOCENT";
 
   const description =
     mode === "course"
@@ -139,7 +250,7 @@ export default function DocentDialog({
             >
               {mode === "course"
                 ? "이 코스의 이야기를 들어볼까요?"
-                : placeStop?.place.name ?? "이 장소의 이야기를 들어볼까요?"}
+                : (placeStop?.place.name ?? "이 장소의 이야기를 들어볼까요?")}
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -169,8 +280,8 @@ export default function DocentDialog({
               </p>
 
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                작품과 촬영지 정보를 바탕으로 현장에서 들을 이야기를 만들고
-                있습니다.
+                DB에 저장된 작품과 촬영지 정보를 확인해 현장에서 들을 이야기를
+                만들고 있습니다.
               </p>
             </div>
           )}
@@ -182,8 +293,8 @@ export default function DocentDialog({
               </p>
 
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                검증된 장면과 촬영지 정보가 더 준비되면 AI 도슨트를 제공할
-                예정입니다.
+                장면 또는 검증된 촬영 정보가 충분하지 않아 도슨트를 생성하지
+                않았어요.
               </p>
             </div>
           )}
@@ -229,9 +340,9 @@ export default function DocentDialog({
 
               <div className="mt-5 rounded-2xl border border-slate-200 px-4 py-4">
                 <p className="text-xs leading-5 text-muted-foreground">
-                  현재는 AI Docent UX 확인을 위한 Mock 콘텐츠예요. 실제
-                  서비스에서는 DB에 저장된 검증 정보만 서버에서 조회한 뒤 AI
-                  도슨트를 생성합니다.
+                  FAVEWAY는 DB에 저장된 장면과 검증된 촬영지 정보를 바탕으로 AI
+                  도슨트를 생성합니다. 정보가 충분하지 않은 경우 내용을 임의로
+                  만들어내지 않습니다.
                 </p>
               </div>
 
