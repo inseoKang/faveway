@@ -1,5 +1,7 @@
 # FAVEWAY Dev Log
 
+최종 업데이트: 2026-09-29.
+
 FAVEWAY 개발 과정에서 발생한 문제, 설계 판단, 구현 변경,
 예외 처리 기준을 기록합니다.
 
@@ -1734,6 +1736,734 @@ DB에 `region`을 명시적으로 추가해
 
 ---
 
+# 2026-09-22 | 촬영지 데이터 검수 파이프라인 구축
+
+## 문제
+
+FAVEWAY의 촬영지 데이터를 작품별로 수동 추가하는 방식은
+데이터가 늘어날수록 다음 문제가 발생한다.
+
+```text
+원천 데이터 형식 차이
++
+동일 장소 중복
++
+주소 표현 차이
++
+서로 다른 출처의 동일 촬영지
++
+검증 우선순위 판단 어려움
+```
+
+또한 원천 데이터를 그대로 서비스 DB에 넣으면
+잘못된 장소나 중복 데이터를 서비스에서 사용할 가능성이 있다.
+
+## 판단
+
+원천 데이터를 바로 DB에 넣지 않고
+
+```text
+Raw Data
+↓
+정규화
+↓
+중복 비교
+↓
+출처 병합
+↓
+검수 후보 생성
+↓
+사람이 확인
+↓
+서비스 DB 반영
+```
+
+단계로 분리하기로 했다.
+
+AI나 자동화가 최종 촬영 사실을 확정하지 않고,
+검수할 후보를 만드는 역할까지만 담당한다.
+
+## 구현 1. 데이터 소스 통합
+
+사용한 주요 데이터:
+
+```text
+KCCF 촬영지 공공데이터
++
+Blog 촬영지 데이터
++
+작품 ↔ 배우 데이터
+```
+
+각 데이터의 컬럼 구조가 다르기 때문에
+공통 후보 구조로 변환했다.
+
+## 구현 2. 서울 범위 필터
+
+FAVEWAY 초기 서비스 범위가 서울이므로
+원천 데이터 단계에서 서울 촬영지만 후보로 사용한다.
+
+서울 외 데이터는 원본에서 삭제하지 않고
+현재 서비스 후보 생성 과정에서만 제외한다.
+
+## 구현 3. 작품명 / 주소 정규화
+
+동일한 작품이나 주소가
+다른 문자열로 표현될 수 있기 때문에
+비교 전에 값을 정규화한다.
+
+기준:
+
+```text
+작품명 정규화
++
+주소 정규화
++
+작품 + 주소 기준 비교
+```
+
+이를 통해 동일 촬영지가
+여러 출처에 존재하는지 비교할 수 있게 했다.
+
+## 구현 4. 출처 병합
+
+동일한 작품과 장소가
+KCCF와 Blog 양쪽에서 확인되는 경우
+별개의 장소로 만들지 않고 하나의 후보로 병합한다.
+
+후보에는 어떤 출처에서 확인됐는지 함께 기록한다.
+
+```text
+KCCF only
+Blog only
+Both sources
+```
+
+두 출처에서 동시에 확인되는 데이터는
+검수 시 우선적으로 확인할 수 있도록 했다.
+
+## 구현 5. 배우 데이터 연결
+
+촬영지 후보가 생성될 때
+해당 작품의 배우 데이터 존재 여부를 함께 연결했다.
+
+이는 향후 FAVEWAY의 핵심 관계인
+
+```text
+Actor
+→ Scene
+→ Place
+```
+
+구조로 확장 가능한지를 판단하기 위한 정보다.
+
+## 구현 6. 검수 기준 생성
+
+검수 과정에서 다음 정보를 계산한다.
+전체 후보와 우선 검수 후보 CSV의 컬럼은 구분한다.
+
+```text
+장소명 비교
+주소 비교
+좌표 비교
+근거리 여부
+출처 중복 여부
+distance_meters
+review_reason
+recommended_action
+```
+
+이를 통해 수백 개 데이터를
+모두 같은 우선순위로 검토하지 않아도 되도록 했다.
+
+## 결과
+
+1차 전체 후보:
+
+```text
+443개
+```
+
+주요 작품:
+
+```text
+여신강림 90
+도깨비 61
+빈센조 50
+스타트업 42
+런온 42
+미생 38
+알고있지만 37
+그 해 우리는 30
+사내맞선 29
+오징어게임 24
+```
+
+우선 검수 대상으로 분류된 후보:
+
+```text
+167개
+```
+
+## 포트폴리오 포인트
+
+단순히 외부 데이터를 수집한 것이 아니라
+
+```text
+원천 데이터
+→ 정규화
+→ 비교
+→ 검수 후보
+→ 서비스 데이터
+```
+
+단계를 분리했다.
+
+서비스의 신뢰성이 중요한 촬영지 데이터를
+자동으로 확정하지 않고
+사람이 검수할 수 있는 형태로 변환하는
+데이터 파이프라인을 설계한 경험으로 설명할 수 있다.
+
+---
+
+# 2026-09-28 | AI Docent UI를 실제 OpenAI API에 연결
+
+## 문제
+
+AI Docent의 DB Context Layer,
+Prompt,
+Structured Output,
+API Route는 이미 구현되어 있었지만
+
+Frontend에서는 여전히 Mock 데이터를 사용하고 있었다.
+
+따라서 실제 서비스 흐름은:
+
+```text
+Docent UI
+→ Mock
+```
+
+에서 멈춰 있었고,
+
+서버에 구현한 실제 AI 생성 흐름이
+Frontend 사용자 경험과 연결되지 않은 상태였다.
+
+## 판단
+
+Mock UX에서 검증한 상태 구조는 유지하고
+
+```text
+Mock 함수
+```
+
+부분만 실제 API 요청으로 교체하기로 했다.
+
+한 번에 UI까지 다시 설계하지 않고
+
+```text
+loading
+success
+empty
+error
+retry
+```
+
+상태 처리는 그대로 유지했다.
+
+## 구현 1. 환경변수
+
+OpenAI 관련 설정을 프로젝트 환경변수로 분리했다.
+
+```env
+OPENAI_API_KEY=
+OPENAI_DOCENT_MODEL=
+ENABLE_OPENAI_DOCENT=
+```
+
+실제 API Key는 프로젝트의 `.env.local`에서 관리한다.
+
+`.env.example`에는 API Key와 모델 값을 비워 두고,
+호출 플래그의 안전한 예시값 `ENABLE_OPENAI_DOCENT=false`를 기록한다.
+
+## 구현 2. OpenAI Client
+
+서버 전용 OpenAI Client를 사용한다.
+
+```text
+src/lib/ai/openai.ts
+```
+
+기본 Docent 모델을 설정하고
+API Key가 Client에 노출되지 않도록 했다.
+
+## 구현 3. 실제 Docent 요청
+
+기존 Mock 호출을 다음 API 요청으로 변경했다.
+
+```text
+장소 도슨트
+
+POST /api/docents/place
+```
+
+```text
+코스 도슨트
+
+POST /api/docents/course
+```
+
+전체 흐름:
+
+```text
+Client
+↓
+Next.js Route Handler
+↓
+Supabase Context 조회
+↓
+generatePlaceDocent
+또는
+generateCourseDocent
+↓
+OpenAI Responses API
+↓
+Structured Output
+↓
+DocentDialog
+```
+
+## 구현 4. Evidence 정책 정리
+
+실제 DB의 `verification_status`를 기준으로
+AI narration에서 사용할 근거를 제한했다.
+
+```text
+PUBLIC_DATA
+→ narration evidence 허용
+
+UNVERIFIED
+→ 검증된 사실처럼 사용하지 않음
+```
+
+Scene description은
+작품 속 장면 context로 별도 사용한다.
+
+AI가 제공된 DB Context 밖의 정보를
+추측해서 생성하지 않도록 Prompt 규칙을 유지했다.
+
+## 구현 5. 실제 API 상태 처리
+
+기존 UX를 실제 API 응답과 연결했다.
+
+```text
+Loading
+Success
+Empty
+Error
+Retry
+```
+
+Context가 부족한 경우:
+
+```text
+422
+DOCENT_CONTEXT_INSUFFICIENT
+```
+
+를 일반 오류가 아니라
+Empty 상태로 처리한다.
+
+OpenAI 호출 자체가 실패하더라도
+Course 전체 화면은 유지하고
+Docent 기능 내부에서만 Error 상태를 표시한다.
+
+## 이슈 1. API Route 경로 불일치
+
+초기 테스트에서 다음 경로를 호출했다.
+
+```text
+/api/docent/place
+/api/docent/course
+```
+
+하지만 실제 Route 구조는:
+
+```text
+/api/docents/place
+/api/docents/course
+```
+
+였다.
+
+이 때문에 API 요청에서 404가 발생했다.
+
+## 해결
+
+Frontend fetch 경로를
+실제 App Router 디렉터리와 동일하게 수정했다.
+
+```text
+/api/docents/place
+/api/docents/course
+```
+
+이후 요청이 Route Handler까지 정상적으로 도달했다.
+
+## 이슈 2. OpenAI API 429
+
+Route 문제 해결 후 요청은:
+
+```text
+Client
+→ API Route
+→ Supabase Context
+→ openai.responses.create()
+```
+
+까지 도달했지만
+
+```text
+429
+credit_balance_exhausted
+```
+
+오류가 발생했다.
+
+당시 OpenAI Platform에는
+API Credit이 존재했기 때문에
+코드 문제인지 Billing 문제인지 추가 확인이 필요했다.
+
+## 결과
+
+이 단계에서 다음 흐름까지 검증했다.
+
+```text
+Client
+↓
+Next.js API Route
+↓
+DB Context
+↓
+OpenAI SDK
+```
+
+실제 생성 성공 여부는
+429 문제 해결 후 별도로 확인하기로 했다.
+
+## 포트폴리오 포인트
+
+Mock을 한 번에 제거하고 UI까지 다시 구현하지 않고
+
+```text
+검증된 UX 상태 구조 유지
++
+데이터 호출 부분만 실제 API로 교체
+```
+
+하는 방식으로 실제 AI 기능을 연결했다.
+
+또한 AI 실패가
+Course 전체 기능 장애로 전파되지 않도록
+기능별 오류 경계를 유지했다.
+
+---
+
+# 2026-09-29 | OpenAI 429 오류 진단 및 환경변수 충돌 해결
+
+## 문제
+
+OpenAI Platform에서 다음 상태를 확인했다.
+
+```text
+Credit balance
+→ $5.00
+
+FAVEWAY Project
+→ 존재
+
+FAVEWAY Local API Key
+→ Active
+
+Permissions
+→ All
+```
+
+하지만 실제 API 요청은 계속:
+
+```text
+429
+credit_balance_exhausted
+```
+
+를 반환했다.
+
+새 API Key를 발급하고
+개발 서버를 재시작해도 동일했다.
+
+또한 OpenAI Platform에서
+새로 발급한 `FAVEWAY Local` Key가:
+
+```text
+Last used: Never
+```
+
+상태라는 점을 확인했다.
+
+## 판단
+
+Billing 자체보다
+
+```text
+실제 Next.js 서버가
+어떤 OPENAI_API_KEY를 사용하고 있는가
+```
+
+를 먼저 확인하기로 했다.
+
+API Error Response Header에는:
+
+```text
+openai-organization
+openai-project
+```
+
+정보가 포함되어 있었고,
+
+실제 요청은 FAVEWAY용으로 예상한 환경과 다른
+Organization / Project로 전달되고 있었다.
+
+## 진단
+
+현재 shell 환경의 `OPENAI_API_KEY` 존재 여부를 확인했다.
+
+```bash
+node -e 'const k=process.env.OPENAI_API_KEY||""; console.log({exists:!!k,suffix:k.slice(-4),length:k.length})'
+```
+
+결과:
+
+```text
+exists: true
+```
+
+즉 FAVEWAY 프로젝트의 `.env.local`과 별개로
+터미널 환경 자체에 기존 OpenAI API Key가 등록되어 있었다.
+
+## 원인
+
+Next.js 개발 서버 실행 시
+
+```text
+기존 shell environment
+OPENAI_API_KEY
+```
+
+가 이미 존재했고,
+
+프로젝트의:
+
+```text
+.env.local
+```
+
+에 설정한 FAVEWAY API Key 대신
+기존 전역 환경변수가 사용되고 있었다.
+
+기존 Key는 다른 OpenAI Organization / Project에 연결되어 있었고,
+해당 환경에서는 사용할 API Credit이 없어
+
+```text
+credit_balance_exhausted
+```
+
+가 발생했다.
+
+따라서 문제의 원인은:
+
+```text
+OpenAI Billing 오류
+```
+
+가 아니라
+
+```text
+전역 환경변수와
+프로젝트 로컬 환경변수의 충돌
+```
+
+이었다.
+
+## 해결
+
+현재 shell의 기존 환경변수를 제거했다.
+
+```bash
+unset OPENAI_API_KEY
+```
+
+이후 개발 서버를 완전히 재시작했다.
+
+```bash
+npm run dev
+```
+
+이제 Next.js가
+FAVEWAY 프로젝트의 `.env.local`에 설정한 API Key를 사용하도록 했다.
+
+## 결과
+
+OpenAI Responses API 호출이 정상적으로 성공했다.
+
+실제 Course Docent 흐름:
+
+```text
+Course
+↓
+POST /api/docents/course
+↓
+Supabase Context
+↓
+generateCourseDocent()
+↓
+OpenAI Responses API
+↓
+Structured Output
+↓
+title + narration
+↓
+DocentDialog
+```
+
+생성된 AI Docent가
+Course 화면에 정상적으로 표시되는 것을 확인했다.
+
+따라서 Course Docent는
+Mock UX 단계에서 실제 OpenAI API 연동 성공 단계로 전환됐다.
+
+Place Docent는 실제 API 요청 연결까지 반영했으며,
+최종 생성 성공 검증은 다음 작업으로 남겨두었다.
+
+## 추가 정리
+
+다음 작업:
+
+```text
+Place Docent 실제 생성 및 표시 최종 검증
+↓
+FAVEWAY Local API Key의 Last used 갱신 확인
+↓
+docent-mock.ts 제거 및 Mock 타입 의존성 정리
+```
+
+위 항목은 아직 완료로 기록하지 않는다.
+
+새 터미널을 열 때
+기존 API Key가 다시 설정될 가능성을 확인하기 위해
+shell 설정 파일도 점검할 수 있다.
+
+```bash
+grep -n "OPENAI_API_KEY" ~/.zshrc ~/.zprofile ~/.bash_profile ~/.bashrc 2>/dev/null
+```
+
+프로젝트별 API Key는
+전역 환경변수보다 각 프로젝트의 `.env.local`에서
+관리하는 방향을 유지한다.
+
+## 포트폴리오 포인트
+
+외부 API 오류를 단순히
+"결제 문제"로 판단하지 않고
+
+```text
+HTTP Error
+↓
+Response Header
+↓
+Organization / Project 확인
+↓
+API Key 사용 기록
+↓
+Shell Environment
+↓
+Next.js Environment Variable
+```
+
+순서로 범위를 좁혔다.
+
+특히 동일한 환경변수 이름이
+
+```text
+Shell
++
+.env.local
+```
+
+에 동시에 존재할 때
+실행 환경에 따라 다른 API Key가 사용될 수 있다는 점을
+실제 문제 해결 과정에서 확인했다.
+
+외부 API,
+Billing,
+Project,
+환경변수,
+Frontend 서버 실행 환경을 함께 추적한
+디버깅 경험으로 설명할 수 있다.
+
+---
+
+# 2026-09-29 | 실제 연동 후 구현 상태 및 후속 작업 정리
+
+## 판단
+
+Course Docent 실제 생성에 성공한 뒤,
+남아 있는 Mock 타입 의존성과 Place 검증 등 후속 작업을 정리했다.
+
+## 확인 1. 실제 API와 남은 Mock 타입
+
+DocentDialog는 Place / Course 실제 API를 호출한다.
+`createMockPlaceDocent` / `createMockCourseDocent`를 호출하지 않는다.
+다만 `DocentMockStop`과 `MockDocentResult` 타입 의존성이 남아 있다.
+Mock 파일 완전 제거는 다음 작업이다.
+
+## 확인 2. 언어와 생성 근거
+
+API와 Prompt는 ko / en을 지원하지만 UI는 ko로 고정 요청한다.
+Place는 해당 장소에 Scene description 또는 허용된 evidence가 필요하다.
+Course는 모든 Stop의 Context가 존재하고 최소 한 Stop에 설명 근거가 있으면 생성한다.
+
+Evidence는 PUBLIC_DATA이며 비어 있지 않은 verified_fact만 허용한다.
+Scene은 별도 입력이며 PUBLIC_DATA로 독립 검증된 정보라고 간주하지 않는다.
+`place_description`은 현재 LLM 입력에 포함되지 않는다.
+
+## 확인 3. 오류 상태
+
+```text
+422 DOCENT_CONTEXT_INSUFFICIENT → Empty
+404 / 503 / 500 및 그 밖의 실패 → Error + Retry
+```
+
+OpenAI 측 429는 앱에서 500 DOCENT_GENERATION_FAILED로 반환한다.
+외부 API 오류와 앱 API의 응답 상태를 구분한다.
+
+## 확인 4. 데이터 파이프라인과 필터
+
+기존 출력 CSV는 후보 443개, 우선 검수 167개이며 모두 PENDING이다.
+파이프라인은 CSV 생성까지 수행하며 수동 검수와 Supabase Import는 별도 단계다.
+같은 작품 + 같은 정규화 주소는 장소명이 달라도 후보로 병합하는 현재 한계가 있다.
+
+Trip / 작품별 장소 API는 is_active !== false와 서울 필터를 적용한다.
+배우별 장소 API에는 서울 필터가 없으며,
+Trip은 PUBLIC_DATA 상태를 후보의 필수 조건으로 검사하지 않는다.
+
+## 다음 작업
+
+Place Docent 실제 생성과 표시를 검증하고,
+Mock 함수와 타입 의존성을 정리한다.
+이후 한국어 / 영어 출력 품질과 Error / Retry 동작을 확인한다.
+
+---
+
 # 현재 핵심 Frontend 상태 흐름
 
 ```text
@@ -1761,15 +2491,27 @@ localStorage
 ```
 
 AI Docent는 현재 Course Stops를 기반으로
-별도의 Mock UX를 구성한다.
+서버에서 DB Context를 다시 조회하고
+OpenAI API를 통해 생성한다.
 
 ```text
 Course Stops
 ↓
 Docent Stop Order
 ↓
-Course / Place Docent Mock
+Course / Place Docent API
+↓
+Supabase Context
+↓
+OpenAI Responses API
+↓
+Structured Output
+↓
+DocentDialog
 ```
+
+Course Docent는 실제 생성과 화면 표시까지 확인했다.
+Place Docent는 실제 API 연결 후 최종 검증이 남아 있다.
 
 ---
 
@@ -1848,23 +2590,35 @@ TMAP fallback
 현재:
 
 ```text
-검증된 정보 기반 Docent Context
+DB Scene 기록 + 허용된 Evidence
 +
-Mock Docent UX
+Evidence Policy
 +
-실제 OpenAI 연결용 Route Handler
+Prompt Guardrail
++
+OpenAI Responses API
++
+Structured Output
++
+Place / Course Docent UI
 ```
+
+Course Docent는 실제 OpenAI 생성과 화면 표시까지 성공했다.
+Place Docent는 실제 API 연결을 반영했으며 최종 검증은 다음 작업이다.
+
+AI가 DB에 없는 촬영지나 장면 사실을 생성하지 않도록
+DB Context와 Prompt 규칙으로 제한한다.
 
 향후:
 
 ```text
-실제 OpenAI UI 연결
+Place Docent 최종 검증
+KR / EN Docent
+Prompt 품질 검증
 개인화
 Ranking
 TTS
 ```
-
-AI가 촬영지나 장면 사실을 생성하지 않는다.
 
 ---
 
@@ -1910,36 +2664,62 @@ DocentDialog
 현재 구현:
 
 ```text
-Course / Place Mock UX
+Place / Course Docent UI (현재 ko 요청)
 +
 DB Context Layer
 +
-Prompt
+Evidence Policy
++
+Prompt Guardrail
 +
 OpenAI Route Handler
 +
+OpenAI Responses API
++
 Structured Output
++
+Loading / Success / Empty / Error / Retry
 ```
 
 현재 실제 OpenAI 호출:
 
 ```text
-비활성
+로컬 Course 실제 생성 및 화면 표시 성공
+환경별 실행 시 ENABLE_OPENAI_DOCENT === "true" 필요
+.env.example의 기본 예시는 false
 ```
+
+확인 완료:
+
+```text
+Course Docent 실제 생성 성공
+↓
+title + narration 반환
+↓
+DocentDialog 표시
+```
+
+Place Docent는 실제 API 요청 연결까지 반영했으며,
+최종 생성 성공 여부는 아직 검증하지 않았다.
 
 다음 작업:
 
 ```text
-데이터 보강
+Place Docent 최종 검증
 ↓
-Evidence 상태 정책 정리
+FAVEWAY Local API Key의 Last used 갱신 확인
 ↓
-실제 OpenAI 연결
+Mock 함수 / 타입 의존성 제거
 ↓
-Prompt 품질 검증
+KR / EN 언어 선택
+↓
+데이터 보강 및 Prompt 품질 검증
 ↓
 TTS
 ```
+
+새 터미널에서 전역 `OPENAI_API_KEY`가 다시 설정되는지 확인하고,
+프로젝트의 `.env.local`과 충돌하지 않도록 shell 설정을 점검한다.
 
 ---
 

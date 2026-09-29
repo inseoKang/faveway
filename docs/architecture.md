@@ -1,5 +1,7 @@
 # FAVEWAY Architecture
 
+최종 업데이트: 2026-09-29.
+
 ## 1. 목적
 
 FAVEWAY는 영화·드라마·배우를 기준으로
@@ -19,8 +21,8 @@ AI
 DB의 실제 장소
 ```
 
-AI는 검증된 DB 정보를 바탕으로
-설명과 개인화를 제공하는 역할로 제한합니다.
+현재 AI는 DB Context를 바탕으로 Docent 설명을 생성합니다.
+개인화는 향후 확장 대상이며, 촬영지 사실을 임의 생성하지 않도록 제한합니다.
 
 ---
 
@@ -49,11 +51,22 @@ External Services
 별도의 Backend 서버를 두지 않고
 Next.js Route Handler를 API 계층으로 사용합니다.
 
-현재 Course 화면의 AI Docent UX는
-실제 OpenAI API가 아닌 Mock 데이터를 사용합니다.
+현재 상태:
 
-실제 OpenAI 호출 구조는 구현되어 있으나
-환경변수로 비활성화할 수 있습니다.
+```text
+Place / Course UI → 실제 API 요청 연결
+Course Docent → 실제 생성 및 DocentDialog 표시 성공
+Place Docent → 최종 생성 성공 검증 대기
+```
+
+`DocentDialog`는 Mock 생성 함수를 호출하지 않습니다.
+다만 `DocentMockStop`, `MockDocentResult` 타입을 `docent-mock.ts`에서 가져오며,
+Course 페이지도 `DocentMockStop` 타입에 의존합니다.
+Mock 파일과 타입 의존성 제거는 다음 작업입니다.
+
+API는 `ko` / `en`을 허용하지만,
+현재 UI 요청은 `language: "ko"`로 고정되어 있습니다.
+언어 선택 UI와 영어 출력 품질 검증은 아직 남아 있습니다.
 
 ---
 
@@ -138,13 +151,8 @@ Episode 추측
 출처 생성
 ```
 
-현재 실제 OpenAI 호출은:
-
-```env
-ENABLE_OPENAI_DOCENT=false
-```
-
-상태로 비활성화할 수 있습니다.
+실제 호출은 `ENABLE_OPENAI_DOCENT === "true"`에서 허용합니다.
+로컬 환경에서 Course 생성에 성공했습니다. 환경별 활성화 설정은 별도로 관리합니다.
 
 ---
 
@@ -173,7 +181,7 @@ POST /api/routes/walking
 ↓
 Course 확인 / 편집
 ↓
-AI Docent Mock UX
+AI Docent 실제 API UX
 ```
 
 Course 화면에서는:
@@ -384,10 +392,10 @@ Frontend는 다음 역할을 담당합니다.
 - Kakao Marker / Polyline 동기화
 - Loading / Empty / Error / Retry 상태 처리
 - 부분 실패 Warning 처리
-- AI Docent Mock UX
+- AI Docent 실제 API UX
 - Course Docent Dialog
 - Place Docent Dialog
-- AI Docent Loading / Empty / Error / Retry Mock 상태
+- AI Docent Loading / Success / Empty / Error / Retry 상태
 
 ---
 
@@ -487,7 +495,7 @@ StateFeedback
 InlineWarning
 ```
 
-AI Docent Mock UX:
+AI Docent 실제 API UX:
 
 ```text
 Loading
@@ -531,34 +539,27 @@ Docent Context
 
 # 16. AI Docent Evidence
 
-현재 실제 DB의 `verification_status` 값은:
+현재 narration evidence 허용 조건:
 
 ```text
-PUBLIC_DATA
-UNVERIFIED
+verification_status === "PUBLIC_DATA"
++
+verified_fact가 문자열
++
+verified_fact.trim().length > 0
 ```
 
-입니다.
+`UNVERIFIED`의 `verified_fact`는 생성 Context의 evidence에서 제외합니다.
+`source_type`이나 출처 개수만으로 evidence를 허용하지 않습니다.
+현재 필터는 `source_url` / `verified_at` 존재 여부를 검사하지 않습니다.
 
-기존 AI Docent Context의 evidence 허용 기준과
-DB 실제 상태값 사이에 정리가 필요한 부분이 있습니다.
+Scene description은 evidence와 별도로 전달합니다.
+`PUBLIC_DATA`는 개별 촬영 관계 사실의 사용 조건이며,
+Scene / Episode / Actor 정보까지 독립 검증됐다는 의미는 아닙니다.
+Prompt는 Scene 기록에 명시된 범위에서만 설명하도록 제한합니다.
 
-실제 OpenAI UI 연결 전:
-
-```text
-DB verification_status
-↓
-Evidence 허용 기준 확정
-↓
-Context Filter 수정
-↓
-실제 AI 테스트
-```
-
-순서로 정리합니다.
-
-존재하지 않는 상태값을
-문서나 DB에 임의로 추가하지 않습니다.
+이 구조는 생성 근거를 제한하는 구현이며,
+생성 문장의 사실 정확성을 자동으로 보증하는 검증기는 아닙니다.
 
 ---
 
@@ -578,7 +579,16 @@ Verified Fact
 DOCENT_CONTEXT_INSUFFICIENT
 ```
 
-를 반환합니다.
+를 `422`로 반환합니다.
+
+Course는 모든 Stop의 Context가 존재하고,
+그중 최소 한 Stop에 위 설명 근거가 있으면 생성합니다.
+한 Stop이라도 Context가 없으면 `404`, 전체 Stop에 설명 근거가 없으면 `422`입니다.
+근거 없는 Stop에 촬영 사실이나 장면 내용을 추가하지 않도록 Prompt로 제한합니다.
+
+Docent Context 조회는 비활성 장소를 제외하지만 서울 region 필터를 다시 적용하지 않습니다.
+Scene은 요청 작품 범위로 제한합니다.
+`place_description`, 사용자 취향, 여행 분위기는 현재 생성 Context에 포함하지 않습니다.
 
 ---
 
@@ -633,26 +643,36 @@ Actor
 
 # 20. 실제 OpenAI 호출 제어
 
-```env
-ENABLE_OPENAI_DOCENT=false
-```
-
-비활성 상태에서는:
+현재 Route Handler는 다음 조건에서만 실제 생성을 허용합니다.
 
 ```text
-POST /api/docents/place
-POST /api/docents/course
+ENABLE_OPENAI_DOCENT === "true"
 ```
 
-요청이 OpenAI까지 전달되지 않습니다.
+미설정 또는 다른 값이면 `503 DOCENT_NOT_ENABLED`로 종료합니다.
+`.env.example`은 안전한 예시값으로 `ENABLE_OPENAI_DOCENT=false`를 유지합니다.
+로컬에서는 호출을 활성화해 Course 생성과 화면 표시까지 확인했습니다.
+배포 환경 설정은 다음 작업입니다.
 
-실제 연결 시:
+관련 서버 환경변수:
 
 ```env
 ENABLE_OPENAI_DOCENT=true
+OPENAI_API_KEY=
+OPENAI_DOCENT_MODEL=
 ```
 
-로 변경합니다.
+실제 API Key는 서버 환경변수로 관리합니다.
+현재 코드의 기본 모델은 `gpt-5-mini`이며,
+`OPENAI_DOCENT_MODEL` 값이 있으면 해당 값으로 대체합니다.
+
+API Key는 Route Handler에서 사용하는 OpenAI Client가 읽습니다.
+현재 Client는 요청 시 생성되며 API Key가 없으면 오류를 발생시킵니다.
+
+2026-09-29에는 기존 shell의 `OPENAI_API_KEY`가
+프로젝트 `.env.local`의 키보다 우선 적용되어 다른 환경으로 요청된 문제가 있었습니다.
+기존 환경변수를 해제하고 개발 서버를 다시 시작한 뒤 Course 생성에 성공했습니다.
+새 shell에서도 같은 문제가 재발하는지와 영구 설정 정리는 후속 확인 대상입니다.
 
 ---
 
@@ -668,24 +688,28 @@ Course
       └─ Place Docent
 ```
 
-현재 데이터 소스:
+현재 데이터 흐름:
 
 ```text
 DocentDialog
 ↓
-docent-mock.ts
-```
-
-실제 연결 시:
-
-```text
-Mock
+POST /api/docents/place 또는 /api/docents/course
 ↓
-POST /api/docents/place
-POST /api/docents/course
+서버 DB Context 재조회
+↓
+OpenAI Responses API
+↓
+Structured Output
+↓
+title + narration 표시
 ```
 
-로 교체할 예정입니다.
+Course는 실제 생성과 화면 표시까지 성공했습니다. Place 최종 검증은 남아 있습니다.
+Mock 생성 호출은 사용하지 않지만 Mock 파일의 타입 의존성은 남아 있습니다.
+API는 ko / en을 지원하고 UI는 ko로 고정되어 있습니다.
+
+현재 `422 DOCENT_CONTEXT_INSUFFICIENT`는 Empty,
+나머지 비정상 응답은 Error + Retry로 처리합니다.
 
 ---
 
@@ -734,3 +758,37 @@ AI가 맡지 않는 역할:
 장면 사실 생성
 출처 생성
 ```
+
+---
+
+# 24. 데이터 파이프라인과 서비스 DB
+
+```text
+KCCF / Blog CSV
+↓
+대상 작품 및 서울 주소 필터
+↓
+작품명 / 주소 정규화
+↓
+작품 + 주소 기준 후보 병합
+↓
+좌표 / 장소명 / 출처 비교
+↓
+전체 후보 CSV + 우선 검수 CSV
+```
+
+현재 파이프라인 코드의 자동 처리는 CSV 생성까지입니다.
+수동 검수와 승인 데이터의 Supabase 반영은 별도 단계이며,
+이 코드가 DB import까지 수행하는 것은 아닙니다.
+
+현재 출력 CSV는 후보 443개, 우선 검수 167개이며 모두 PENDING입니다.
+이는 서비스 DB에 등록된 장소 수가 아닙니다.
+
+# 25. 적용 범위와 현재 한계
+
+- Trip과 작품별 장소 API는 `is_active !== false` 및 서울 조건을 적용합니다.
+- 배우별 장소 API에는 서울 필터가 없습니다. Explore의 두 탐색 경로가 같은 지역 범위를 반환한다고 단정하지 않습니다.
+- Trip은 `place_id`, 배우별 조회는 `content_id + place_id`로 중복을 제거합니다.
+- Course 생성은 규칙 기반이며 AI Ranking / 개인화는 아직 구현 예정입니다.
+- `PUBLIC_DATA` 필터는 Docent의 `verified_fact` 사용 조건입니다. 모든 Course 후보의 필수 검증 상태가 아닙니다.
+- Structured Output은 응답 형식을 제한합니다. 생성 내용의 사실 검증은 별도 품질 확인이 필요합니다.

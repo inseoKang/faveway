@@ -1,5 +1,7 @@
 # FAVEWAY Database
 
+최종 업데이트: 2026-09-29.
+
 ## 1. 핵심 원칙
 
 FAVEWAY의 Database는
@@ -163,7 +165,7 @@ FAVEWAY의 초기 Course 범위는 서울이므로:
 ```text
 region = 서울
 +
-is_active = true
+is_active !== false
 ```
 
 인 장소를 Course 후보로 사용합니다.
@@ -197,7 +199,7 @@ place_relations.verified_fact
 
 ### `place_type`
 
-현재 DB 상태:
+2026-09-21 점검 기준:
 
 ```text
 NULL
@@ -219,7 +221,7 @@ Course 또는 AI Docent의 신뢰 데이터로 사용하지 않습니다.
 작품과 장소의 기본 관계와
 촬영지 검증 정보를 관리합니다.
 
-현재 실제 컬럼:
+테이블 컬럼 (2026-09-21 점검 기준):
 
 ```text
 id
@@ -377,7 +379,7 @@ content_id + place_id
 현재 Course 후보로 사용할 수 있는 장소인지 관리합니다.
 
 ```text
-is_active = true
+is_active !== false
 → 현재 Course Candidate 가능
 
 is_active = false
@@ -410,7 +412,7 @@ is_active = false
 Course 후보 조건:
 
 ```text
-is_active = true
+is_active !== false
 +
 region = 서울
 +
@@ -478,7 +480,7 @@ verified_at
 
 # 11. verification_status
 
-현재 실제 DB에서 확인된 값:
+2026-09-21에 확인한 상태값:
 
 ```text
 PUBLIC_DATA
@@ -552,7 +554,9 @@ verified_at
 
 ---
 
-# 14. 현재 도깨비 데이터 점검 결과
+# 14. 도깨비 데이터 점검 기록 (2026-09-21)
+
+점검일: 2026-09-21.
 
 도깨비:
 
@@ -578,7 +582,7 @@ Episode가 확인되지 않은 Scene은
 
 ## 서울 촬영지
 
-현재 도깨비 서울 촬영지:
+2026-09-21 점검 당시 도깨비 서울 촬영지:
 
 ```text
 총 19곳
@@ -597,7 +601,7 @@ verified_at
 ```
 
 이 모두 보강된 서울 촬영지는
-현재 14곳입니다.
+당시 14곳입니다.
 
 `place_description`은
 공식 또는 신뢰 가능한 설명 근거가 확보된 장소부터
@@ -656,35 +660,40 @@ Docent 생성
 
 ---
 
-# 17. AI Docent Evidence 상태 주의
+# 17. AI Docent Evidence 적용 정책
 
-현재 DB의 실제 `verification_status`는:
-
-```text
-PUBLIC_DATA
-UNVERIFIED
-```
-
-입니다.
-
-기존 AI Docent Context 코드와 문서에는
-과거 임시 상태값을 기준으로 한 evidence filter가 남아 있을 수 있습니다.
-
-따라서 실제 OpenAI UI 연결 전:
+현재 narration evidence 허용 조건:
 
 ```text
-DB 실제 verification_status
-↓
-AI Evidence 허용 기준 확정
-↓
-docent-context 코드 수정
-↓
-실제 AI 테스트
+verification_status === "PUBLIC_DATA"
++
+verified_fact가 문자열
++
+verified_fact.trim().length > 0
 ```
 
-순서로 정리해야 합니다.
+`UNVERIFIED`의 `verified_fact`는 생성 Context의 evidence에서 제외합니다.
+`source_type`이나 출처 개수만으로 evidence를 허용하지 않습니다.
+현재 필터는 `source_url` / `verified_at` 존재 여부를 검사하지 않습니다.
 
-존재하지 않는 상태값을 임의로 추가하지 않습니다.
+Scene description은 evidence와 별도로 전달합니다.
+`PUBLIC_DATA`는 개별 촬영 관계 사실의 사용 조건이며,
+Scene / Episode / Actor 정보까지 독립 검증됐다는 의미는 아닙니다.
+Prompt는 Scene 기록에 명시된 범위에서만 설명하도록 제한합니다.
+
+이 구조는 생성 근거를 제한하는 구현이며,
+생성 문장의 사실 정확성을 자동으로 보증하는 검증기는 아닙니다.
+
+현재 코드가 생성 Context에 넣는 Place 정보는 `id`, `name`, `address`입니다.
+`is_active`는 조회 시 제외 판단에 사용하고,
+`place_description` / `place_type` / `source_url` / `verified_at`는 현재 LLM 입력에 넣지 않습니다.
+
+Context 존재 확인과 생성 가능 여부는 별도입니다.
+Scene 또는 작품·장소 관계 행이 존재해도,
+설명 가능한 Scene description과 허용된 verified_fact가 모두 없을 수 있습니다.
+
+Trip 후보 조회는 PUBLIC_DATA 상태를 필수로 요구하지 않습니다.
+AI evidence 사용 조건을 DB 전체 또는 Course 전체의 검증 상태로 확대 해석하지 않습니다.
 
 ---
 
@@ -695,11 +704,24 @@ docent-context 코드 수정
 - `place_type` 분류 기준 재정의
 - 동일 실제 장소 + 여러 작품 관계의 장소 중심 통합
 - Actor / Scene 데이터 확대
-- Verification 상태 정책 확정
+- 현재 AI Evidence 정책 유지 및 새로운 Verification 상태 필요성 검토
 - source 관리 방식 고도화
 - 검증 정보 별도 테이블 분리 검토
-- 데이터 정규화 자동화
-- ETL 자동화
+- 구현된 CSV 정규화 / 후보 생성 파이프라인의 검수 이후 단계 확장
+- 승인 데이터 Import 및 ETL 자동화 검토
 - 폐업 / 이전 장소 검증
 - 좌표 검증 자동화
 - 추가 작품 2~3개 데이터 구축
+
+---
+
+# 19. 활성 조건과 데이터 수량 해석
+
+현재 Trip / 작품별 장소 API는 `is_active !== false`를 사용합니다.
+이 조건은 false만 제외하며 null을 명시적으로 제외하지 않습니다.
+Course 입력 구조 검증은 `is_active`의 boolean 타입을 요구합니다.
+DB의 NOT NULL / CHECK 제약과 애플리케이션의 null 처리 정합성은 추가 점검이 필요합니다.
+
+파이프라인 후보 443개와 우선 검수 167개는 로컬 CSV의 행 수입니다.
+해당 수를 Supabase의 places 수나 검증 완료 장소 수로 기록하지 않습니다.
+후보의 `review_status`와 DB의 `verification_status`도 서로 다른 값입니다.

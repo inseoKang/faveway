@@ -1,11 +1,16 @@
 # FAVEWAY Recommendation
 
+최종 업데이트: 2026-09-29.
+
 ## 1. 목표
 
 FAVEWAY의 추천 로직은
 DB에 없는 촬영지를 생성하는 것이 아니라,
 
-**검증된 촬영지 Candidate 안에서 실제 여행 가능한 서울 도보 Route를 구성하는 것**
+**DB에 등록된 촬영지 Candidate 안에서 여행 조건에 맞는 서울 도보 Route를 구성하는 것**
+
+현재 후보 선정은 PUBLIC_DATA 상태를 필수 조건으로 검사하지 않습니다.
+초기 거리·시간은 Haversine 추정치이며 실제 보행 가능성을 보증하지 않습니다.
 
 을 목표로 합니다.
 
@@ -106,7 +111,7 @@ region = 서울
 현재 Course 후보 기본 조건:
 
 ```text
-is_active != false
+is_active !== false
 +
 region = 서울
 +
@@ -177,6 +182,14 @@ Place B
 Haversine은 실제 도로 구조가 아닌
 두 좌표 사이 직선거리를 계산합니다.
 
+예상 도보 시간은 거리 보정 1.25배와 시속 4km를 적용합니다.
+
+```text
+ceil(distanceKm × 1.25 ÷ 4 × 60)
+```
+
+거리 값 자체는 직선거리이며 1.25배 보정은 시간 추정에 적용합니다.
+
 따라서 초기 Course 생성 이후
 실제 Course 화면에서 TMAP을 통해 실제 도보 경로를 다시 조회합니다.
 
@@ -200,9 +213,8 @@ Route Combination
 Candidate 수가 증가할수록
 Route 조합 수가 빠르게 증가합니다.
 
-현재 프로젝트 데이터 규모에서는
-기존 방식으로 충분하지만,
-데이터가 크게 증가하면 최적화가 필요할 수 있습니다.
+현재 코드는 방문 순서를 포함한 순열을 배열로 생성해 비교합니다.
+후보 수가 늘면 계산 시간과 메모리 사용량을 측정해 최적화 여부를 판단합니다.
 
 ---
 
@@ -295,7 +307,7 @@ Haversine 기반입니다.
 장소 수
 ```
 
-방식으로 균등 분배합니다.
+방식으로 균등 분배하며 `Math.floor`로 분 단위 소수점을 버립니다.
 
 최소 체류 기준:
 
@@ -307,7 +319,9 @@ MIN_STAY_MINUTES = 45
 
 ---
 
-# 12. 현재 데이터 범위
+# 12. 데이터 범위 점검 기록 (2026-09-21)
+
+점검일: 2026-09-21.
 
 도깨비:
 
@@ -321,8 +335,7 @@ MIN_STAY_MINUTES = 45
 서울 활성 촬영지 10곳
 ```
 
-현재 Course 후보 조회에서
-위 조건이 정상적으로 적용되는 것을 확인했습니다.
+서울 후보 필터를 적용했고, 위 작품의 후보 수를 확인했습니다.
 
 이 숫자는 데이터 정제에 따라 변경될 수 있습니다.
 
@@ -560,34 +573,63 @@ AI가 DB에 없는 Place ID를 반환하면
 
 ---
 
-# 22. AI Docent
+# 22. 현재 AI Docent와 향후 개인화
 
-향후 장소별 설명은:
+현재:
 
 ```text
-Verified DB Data
+Course Stops의 작품 / 장소 ID와 순서
+↓
+서버 DB Context 조회
+↓
+Scene 기록 + 허용된 PUBLIC_DATA evidence
+↓
+OpenAI Responses API
+↓
+title + narration
+↓
+DocentDialog
+```
+
+Course Docent는 실제 생성과 화면 표시까지 성공했습니다.
+Place Docent는 실제 API 호출 구조가 연결됐으며 최종 검증은 남아 있습니다.
+API는 ko / en을 지원하지만 현재 UI는 ko로 요청합니다.
+
+현재 AI는 이미 선택된 Course를 설명합니다.
+Course 후보 선정이나 Route 순서를 AI가 결정하지 않습니다.
+
+향후:
+
+```text
+현재 DB Context
++
+검증된 Place Description
 +
 User Preference
 +
-Content
-+
-Scene
-+
-Actor
-+
-Place
-+
-Place Description
-↓
-LLM
+Travel Mood
 ↓
 Personalized Docent
 ```
 
-구조로 생성합니다.
+`place_description`, 사용자 취향, 여행 분위기는 현재 Docent Context에 포함되지 않습니다.
+AI Ranking / Personalization / TTS는 구현 예정입니다.
 
 핵심 제한:
 
 ```text
-DB에 없는 촬영 사실을 임의 생성하지 않는다.
+DB에 없는 촬영 사실을 임의 생성하지 않도록 입력과 Prompt를 제한한다.
 ```
+
+---
+
+# 23. 현재 후보 정책과 한계
+
+- Trip은 동일 `place_id`를 한 번만 방문하도록 중복 제거합니다.
+- 여러 작품이 같은 Place를 가리키면 현재 Map에 마지막으로 저장된 관계가 선택됩니다. 대표 작품 우선순위 정책은 없습니다.
+- 배우별 장소 API는 작품 + 장소 단위 중복 제거이며 서울 필터는 없습니다.
+- Trip / Course 추가 후보에는 서울 필터가 적용됩니다.
+- 활성 후보 필터는 `is_active !== false`입니다. DB null 처리와 Frontend boolean 검증의 정합성은 별도 점검 대상입니다.
+- 좌표 검사는 유한 숫자 여부이며 실제 접근 가능성이나 위경도 범위 검증을 대신하지 않습니다.
+- TMAP 조회 후 조건 초과를 표시하는 구조이며, 실제 경로 기준으로 서버가 Course를 자동 재추천하는 것은 아닙니다.
+- 443개 파이프라인 후보는 검수용 CSV의 행 수이며 현재 추천 DB 규모가 아닙니다.

@@ -1,5 +1,7 @@
 # FAVEWAY Data Fallback Policy
 
+최종 업데이트: 2026-09-29.
+
 ## 1. 목적
 
 FAVEWAY는 데이터가 부족한 경우에도
@@ -129,7 +131,7 @@ Frontend는 이 값을 이용해
 ```text
 region = 서울
 +
-is_active = true
+is_active !== false
 ```
 
 인 촬영지만 Course Candidate로 사용합니다.
@@ -317,7 +319,8 @@ AI Recommendation 구현 예정
 
 ## 13. AI Docent 기본 정책
 
-AI Docent는 서버가 DB에서 다시 조회한 검증 Context를 사용합니다.
+AI Docent는 서버가 DB에서 다시 조회한 Scene 기록과
+허용 조건을 만족하는 evidence를 사용합니다.
 
 ```text
 Client
@@ -358,27 +361,33 @@ Travel Mood
 
 ## 15. verified_fact 검증 정책
 
-현재 실제 DB의 `verification_status` 값은:
+현재 narration evidence 허용 조건:
 
 ```text
-PUBLIC_DATA
-UNVERIFIED
+verification_status === "PUBLIC_DATA"
++
+verified_fact가 문자열
++
+verified_fact.trim().length > 0
 ```
 
-입니다.
+`UNVERIFIED`의 `verified_fact`는 생성 Context의 evidence에서 제외합니다.
+`source_type`이나 출처 개수만으로 evidence를 허용하지 않습니다.
+현재 필터는 `source_url` / `verified_at` 존재 여부를 검사하지 않습니다.
 
-AI Docent에서 어떤 상태를 evidence로 허용할지는
-실제 OpenAI 연결 전에 별도로 확정합니다.
+Scene description은 evidence와 별도로 전달합니다.
+`PUBLIC_DATA`는 개별 촬영 관계 사실의 사용 조건이며,
+Scene / Episode / Actor 정보까지 독립 검증됐다는 의미는 아닙니다.
+Prompt는 Scene 기록에 명시된 범위에서만 설명하도록 제한합니다.
 
-현재 DB에 존재하지 않는 상태값을
-정책 문서에 임의로 추가하지 않습니다.
-
-검증 상태가 확정되지 않은 `verified_fact`는
-AI evidence로 자동 사용하지 않습니다.
+이 구조는 생성 근거를 제한하는 구현이며,
+생성 문장의 사실 정확성을 자동으로 보증하는 검증기는 아닙니다.
 
 ---
 
 ## 16. AI Docent 생성 가능 기준
+
+Place Docent 기준:
 
 ```text
 Scene description
@@ -396,6 +405,11 @@ DOCENT_CONTEXT_INSUFFICIENT
 정보 부족 안내
 ```
 
+Course Docent는 모든 Stop의 Context가 존재해야 하며,
+최소 한 Stop에 위 생성 근거가 있으면 생성합니다.
+모든 Stop에 근거가 없으면 `422`, Context가 하나라도 없으면 `404`입니다.
+근거가 없는 Stop은 이름과 선택 작품만 언급하도록 Prompt로 제한합니다.
+
 ---
 
 ## 17. Scene 없는 AI Docent
@@ -405,11 +419,11 @@ Scene이 없어도
 그 사실 범위 안에서 생성 가능합니다.
 
 ```text
-Scene 없음
+Scene description 없음
 +
-verified_fact 없음
+허용 조건을 만족하는 verified_fact 없음
 ↓
-생성하지 않음
+Place Docent 생성하지 않음
 ```
 
 ---
@@ -440,7 +454,11 @@ Scene Actor 없음
 
 ---
 
-## 21. AI Docent 실제 호출 비활성화
+## 21. AI Docent 실제 호출 제어
+
+로컬 환경에서 Course Docent 생성과 화면 표시까지 성공했습니다.
+호출 활성화 여부는 환경변수로 제어합니다.
+`ENABLE_OPENAI_DOCENT`가 정확히 `true`가 아닌 모든 경우에 차단합니다.
 
 ```env
 ENABLE_OPENAI_DOCENT=false
@@ -459,9 +477,24 @@ DOCENT_NOT_ENABLED
 
 ---
 
-## 22. AI Docent Mock UX
+## 22. AI Docent 실제 API UX
 
-현재 Course 화면에서는 Mock 데이터를 사용합니다.
+현재 상태:
+
+```text
+Place / Course UI → 실제 API 요청 연결
+Course Docent → 실제 생성 및 DocentDialog 표시 성공
+Place Docent → 최종 생성 성공 검증 대기
+```
+
+`DocentDialog`는 Mock 생성 함수를 호출하지 않습니다.
+다만 `DocentMockStop`, `MockDocentResult` 타입을 `docent-mock.ts`에서 가져오며,
+Course 페이지도 `DocentMockStop` 타입에 의존합니다.
+Mock 파일과 타입 의존성 제거는 다음 작업입니다.
+
+API는 `ko` / `en`을 허용하지만,
+현재 UI 요청은 `language: "ko"`로 고정되어 있습니다.
+언어 선택 UI와 영어 출력 품질 검증은 아직 남아 있습니다.
 
 지원 상태:
 
@@ -528,7 +561,7 @@ Actor 추측
 ### `DOCENT_CONTEXT_NOT_FOUND`
 
 ```text
-→ Empty 또는 잘못된 요청 상태
+→ 현재 DocentDialog에서는 Error + Retry
 ```
 
 ### `DOCENT_CONTEXT_INSUFFICIENT`
@@ -545,7 +578,15 @@ Actor 추측
 
 ### `DOCENT_NOT_ENABLED`
 
-실제 OpenAI 호출이 비활성화된 상태입니다.
+HTTP 503이며 현재 UI는 Error + Retry로 표시합니다.
+재시도만으로 활성화되지 않으므로 서버 환경설정 확인이 필요합니다.
+
+### OpenAI 429
+
+OpenAI 측 429는 현재 Route Handler에서 `500 DOCENT_GENERATION_FAILED`로 변환합니다.
+2026-09-29의 `credit_balance_exhausted`는 기존 shell API Key 충돌을 해결한 뒤 해소됐습니다.
+모든 429가 같은 원인이라는 뜻은 아닙니다.
+실제 오류 코드와 서버 실행 환경을 확인해야 합니다.
 
 ---
 
@@ -628,31 +669,34 @@ Network Error
 
 ## 29. 현재 정책 및 구현 상태 요약
 
-| 상황                       | 처리                                      | 구현      |
-| -------------------------- | ----------------------------------------- | --------- |
-| 촬영지 0개                 | Course 생성 안 함 + Empty                 | 완료      |
-| 촬영지 1개                 | 1개 장소 Course 허용                      | 완료      |
-| 1개 장소 이유 안내         | `routeSelectionReason`                    | 완료      |
-| 촬영지 2개 이상            | Route 탐색                                | 완료      |
-| 서울 외 장소               | DB 유지, Course 제외                      | 완료      |
-| 비활성 장소                | Course 제외                               | 완료      |
-| 좌표 없음                  | Explore/Detail 가능, Course 제외          | 완료      |
-| Scene 없음                 | 추측하지 않음                             | 완료      |
-| Episode 없음               | 표시하지 않음                             | 완료      |
-| Actor Scene 관계 없음      | 배우 장소로 추측하지 않음                 | 완료      |
-| 배우 후보 부족             | 사용자 선택 시 배우 조건 제거             | 완료      |
-| 자동 범위 확장             | 수행하지 않음                             | 완료      |
-| TMAP 실패                  | Haversine fallback                        | 완료      |
-| 일반 장소 자동 추가        | 하지 않음                                 | 완료      |
-| AI Recommendation          | DB Candidate 안에서만 선택                | 구현 예정 |
-| AI Docent 서버 기반        | DB Context → LLM 구조                     | 완료      |
-| Place / Course Docent API  | Route Handler                             | 완료      |
-| AI Prompt 정책             | 사실 생성 및 배우 사칭 제한               | 완료      |
-| AI 입력 근거 부족          | Docent 생성 제한                          | 완료      |
-| AI Docent Mock UX          | Loading / Success / Empty / Error / Retry | 완료      |
-| 실제 DB Evidence 정책 정리 | `PUBLIC_DATA` / `UNVERIFIED` 기준 재정의  | 예정      |
-| 실제 OpenAI UI 연결        | Mock → 실제 API 교체                      | 예정      |
-| TTS                        | 텍스트 검증 후 연결                       | 예정      |
+| 상황                      | 처리                                       | 구현      |
+| ------------------------- | ------------------------------------------ | --------- |
+| 촬영지 0개                | Course 생성 안 함 + Empty                  | 완료      |
+| 촬영지 1개                | 1개 장소 Course 허용                       | 완료      |
+| 1개 장소 이유 안내        | `routeSelectionReason`                     | 완료      |
+| 촬영지 2개 이상           | Route 탐색                                 | 완료      |
+| 서울 외 장소              | DB 유지, Course 제외                       | 완료      |
+| 비활성 장소               | Course 제외                                | 완료      |
+| 좌표 없음                 | Explore/Detail 가능, Course 제외           | 완료      |
+| Scene 없음                | 추측하지 않음                              | 완료      |
+| Episode 없음              | 표시하지 않음                              | 완료      |
+| Actor Scene 관계 없음     | 배우 장소로 추측하지 않음                  | 완료      |
+| 배우 후보 부족            | 사용자 선택 시 배우 조건 제거              | 완료      |
+| 자동 범위 확장            | 수행하지 않음                              | 완료      |
+| TMAP 실패                 | Haversine fallback                         | 완료      |
+| 일반 장소 자동 추가       | 하지 않음                                  | 완료      |
+| AI Recommendation         | DB Candidate 안에서만 선택                 | 구현 예정 |
+| AI Docent 서버 기반       | DB Context → LLM 구조                      | 완료      |
+| Place / Course Docent API | Route Handler                              | 완료      |
+| AI Prompt 정책            | 사실 생성 및 배우 사칭 제한                | 완료      |
+| AI 입력 근거 부족         | Docent 생성 제한                           | 완료      |
+| AI Docent 실제 API UX     | Loading / Success / Empty / Error / Retry  | 구현 완료 |
+| 실제 DB Evidence 필터     | PUBLIC_DATA + 비어 있지 않은 verified_fact | 구현 완료 |
+| 실제 OpenAI UI 연결       | Place / Course 실제 요청                   | 구현 완료 |
+| Course Docent 실제 생성   | 생성 및 화면 표시                          | 성공 확인 |
+| Place Docent 실제 생성    | 최종 생성·표시 검증                        | 검증 대기 |
+| Mock 파일 / 타입 정리     | 남은 Mock 타입 의존성 제거                 | 예정      |
+| TTS                       | 텍스트 검증 후 연결                        | 예정      |
 
 ---
 
@@ -695,3 +739,15 @@ DB Fact
 ↓
 AI Explanation
 ```
+
+---
+
+## 31. 현재 코드와 정책의 경계
+
+- AI의 추측을 금지하는 Prompt와 실제 출력의 정확성 보증은 구분합니다. Prompt 품질 검증은 남아 있습니다.
+- Course 후보 선정은 PUBLIC_DATA 상태만 허용하는 구조가 아닙니다. Docent의 narration evidence 필터와 별개입니다.
+- 현재 활성 필터는 `is_active !== false`입니다. null을 false로 취급하는 구현은 아닙니다.
+- 배우별 장소 조회에는 서울 필터가 없고, Trip / 작품별 장소 조회에는 서울 필터가 있습니다.
+- 좌표 `null`이 포함된 Walking Route 구간은 실패 처리하지만, 요청 필드 자체가 잘못된 경우에는 요청 전체를 거절합니다.
+- 서버의 설명 근거 부족 422는 Empty이고, Context 없음 404는 현재 UI에서 Error입니다.
+- API Error / Retry 분기는 구현되어 있지만 모든 실패 시나리오의 실제 재현 검증 완료를 뜻하지 않습니다.

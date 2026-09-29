@@ -1,5 +1,7 @@
 # FAVEWAY Roadmap
 
+최종 업데이트: 2026-09-29.
+
 FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색하고,
 사용자가 선택한 콘텐츠와 조건을 바탕으로
 서울 도보 여행 코스를 구성하는 개인 프로젝트입니다.
@@ -242,11 +244,11 @@ Place
 - [x] Request / Response Type
 - [x] 최소 근거 부족 시 생성 제한
 - [x] 실제 OpenAI 호출 환경변수 제어
-- [x] 개발 중 실제 OpenAI 호출 비활성화
+- [x] 환경변수 미활성화 시 실제 호출 차단
 
 ---
 
-## AI Docent Mock UX
+## AI Docent UI (Mock 기반 구축 후 실제 API 연결)
 
 - [x] Course Docent 진입 버튼
 - [x] Place Docent 진입 버튼
@@ -271,6 +273,20 @@ Place
 
 ## 1. Data 확장 및 정제
 
+### 촬영지 검수 파이프라인 구현 완료
+
+- [x] KCCF / Blog CSV 통합
+- [x] 대상 작품 및 서울 주소 필터
+- [x] 작품명 / 주소 정규화
+- [x] 작품 + 정규화 주소 기준 후보 병합
+- [x] 출처 존재 여부 및 배우 데이터 존재 여부 표시
+- [x] 동일 장소명 / 근거리 교차 출처 / 좌표 중복 후보 표시
+- [x] 검수 사유 / 비교 대상 / 거리 / 추천 액션 생성
+- [x] 전체 후보 443개 및 우선 검수 167개 출력 파일 확인
+
+현재 출력 CSV는 모두 PENDING입니다.
+수동 검수와 승인 데이터의 DB 반영은 다음 단계입니다.
+
 ### 완료
 
 - [x] `places.region` 추가
@@ -279,7 +295,8 @@ Place
 - [x] `places.place_description` 컬럼 추가
 - [x] `place_description` 역할 정의
 - [x] `scene_description` / `place_description` / `verified_fact` 책임 분리
-- [x] `verification_status` 실제 DB 값 확인
+- [x] `verification_status` 실제 DB 값 확인 (2026-09-21)
+- [x] AI Docent evidence에 PUBLIC_DATA + 비어 있지 않은 verified_fact 조건 적용
 - [x] `source_type` 기준 정리
 - [x] 도깨비 Scene / Actor / Place 관계 품질 점검
 - [x] 도깨비 서울 촬영지 1차 검증 정보 보강
@@ -290,33 +307,51 @@ Place
 - [ ] 도깨비 남은 촬영지 검증 보강
 - [ ] `place_description` 추가 보강
 - [ ] `place_type` 분류 기준 재정의
-- [ ] AI Docent evidence와 실제 `verification_status` 정합성 수정
 - [ ] source 관리 방식 추가 정리
-- [ ] 동일 장소 병합 기준
-- [ ] Import CSV 포맷 고정
+- [ ] 동일 주소 내 다른 촬영 포인트 보존 및 수동 병합 기준 보완
+- [ ] 승인 데이터 Import CSV 포맷 고정 및 DB 반영 검증
 - [ ] 추가 작품 2~3개 구축
 - [ ] 추가 작품 Actor → Scene → Place 연결 검증
 
 ---
 
-## 2. AI Docent 실제 연결
+## 2. AI Docent 실제 연결 및 후속 검증
 
-- [ ] 실제 DB `verification_status` 기준으로 Evidence Filter 정리
-- [ ] `DocentDialog` Mock → 실제 API 전환
-- [ ] `ENABLE_OPENAI_DOCENT=true` 실제 테스트
-- [ ] Place Docent 실제 생성 검증
-- [ ] Course Docent 실제 생성 검증
+### 구현 완료
+
+- [x] 실제 DB 상태값을 기준으로 Evidence Filter 정리
+- [x] Scene 기록과 PUBLIC_DATA evidence의 의미 분리
+- [x] `DocentDialog` Mock 생성 호출 → 실제 API 전환
+- [x] `/api/docents/place` / `/api/docents/course` 요청 연결
+- [x] API의 ko / en 입력과 언어별 Prompt 구현
+- [x] 현재 UI 한국어 요청 연결
+- [x] 422 근거 부족 Empty 처리와 나머지 오류 Error / Retry 처리
+- [x] Course와 Place의 서로 다른 최소 생성 근거 처리
+
+### 실제 성공 확인
+
+- [x] 활성 상태에서 Course Docent 실제 생성 및 표시
+- [x] 기존 shell OPENAI_API_KEY 충돌 진단
+- [x] 기존 환경변수 해제 및 개발 서버 재시작 후 429 문제 해소
+
+### 다음 작업
+
+- [ ] Place Docent 실제 생성 및 화면 표시 최종 검증
+- [ ] FAVEWAY Local API Key의 Last used 갱신 및 실제 사용량 확인
+- [ ] 새 shell에서 기존 API Key가 다시 설정되는지 확인 및 설정 정리
+- [ ] `docent-mock.ts`의 미사용 함수와 남은 타입 의존성 제거
+- [ ] KR / EN 언어 선택 UI
 - [ ] 한국어 출력 품질 검증
-- [ ] 영어 출력 품질 검증
+- [ ] 영어 실제 생성 및 출력 품질 검증
 - [ ] Prompt 튜닝
-- [ ] 실제 API Error / Retry 검증
-- [ ] 실제 OpenAI 사용량 확인
+- [ ] 실제 API의 Empty / Error / Retry 시나리오 검증
 - [ ] 비용 제한 기준 정리
 
 ### 개인화
 
 - [ ] 사용자 취향 입력 연결
 - [ ] 여행 분위기 연결
+- [ ] 검증된 place_description의 Context 포함 검토
 
 ### TTS
 
@@ -375,11 +410,11 @@ Place
 # 현재 개발 우선순위
 
 ```text
-1. 도깨비 남은 데이터 보강
+1. Place Docent 최종 검증 및 키 사용 기록 확인
 ↓
-2. AI Evidence 상태 정책 정리
+2. Mock 함수 / 타입 의존성 정리
 ↓
-3. 실제 AI Docent 연결
+3. 데이터 검수·보강 및 KR / EN 출력 품질 검증
 ↓
 4. TTS
 ↓
@@ -393,14 +428,15 @@ Place
 현재 가장 가까운 다음 작업:
 
 ```text
-도깨비 남은 촬영지 검증
+Place Docent 실제 생성 확인
 ↓
-place_description 보강
+Course / Place의 Empty / Error / Retry 확인
 ↓
-AI Docent Evidence Filter 정리
-↓
-실제 OpenAI 연결
+Mock 타입 의존성 제거
 ```
+
+API 연결 완료와 모든 시나리오의 검증 완료를 구분합니다.
+Course 한 번의 생성 성공만으로 Place, 영어, TTS, Production까지 완료로 표시하지 않습니다.
 
 ---
 
@@ -473,3 +509,12 @@ AI
 → DB 유지
 → 현재 Course에서 제외
 ```
+
+---
+
+# 추가 점검 항목
+
+- [ ] `is_active !== false` 필터, DB null 제약, Frontend boolean 검증의 일관성 확인
+- [ ] Explore 작품 / 배우 탐색의 지역 범위 차이 정책 확인
+- [ ] 같은 장소의 복수 작품 관계 중 대표 관계 선택 기준 검토
+- [ ] 파이프라인의 동일 주소 병합과 좌표 대표값 선택 방식 보완 검토
