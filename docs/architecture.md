@@ -1,6 +1,6 @@
 # FAVEWAY Architecture
 
-최종 업데이트: 2026-09-29.
+최종 업데이트: 2026-10-07.
 
 ## 1. 목적
 
@@ -781,8 +781,12 @@ KCCF / Blog CSV
 수동 검수와 승인 데이터의 Supabase 반영은 별도 단계이며,
 이 코드가 DB import까지 수행하는 것은 아닙니다.
 
-현재 출력 CSV는 후보 443개, 우선 검수 167개이며 모두 PENDING입니다.
-이는 서비스 DB에 등록된 장소 수가 아닙니다.
+자동 생성 출력 CSV는 후보 443개, 우선 검수 167개이며 모두 PENDING입니다.
+수동 검수는 별도 기준 파일 `data/manual/content_place_decisions.csv`에 누적합니다.
+2026-10-07 기준 REVIEWED 96 / PENDING 71이며 서비스 DB 등록 수를 의미하지 않습니다.
+원본 출처 존재 플래그는 유입 이력으로 보존하고, 채택·제외한 근거 및 사용자 확인은 검수 메모에서 구분합니다.
+MERGE 기록만으로 장면·배우·근거가 이전되거나 Supabase에 반영되지는 않습니다.
+현재 CSV 이력과 후속 작업은 [데이터 파이프라인](data-pipeline.md#manual-review-csv-history)을 참고합니다.
 
 # 25. 적용 범위와 현재 한계
 

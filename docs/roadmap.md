@@ -1,6 +1,6 @@
 # FAVEWAY Roadmap
 
-최종 업데이트: 2026-09-29.
+최종 업데이트: 2026-10-07.
 
 FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색하고,
 사용자가 선택한 콘텐츠와 조건을 바탕으로
@@ -284,8 +284,19 @@ Place
 - [x] 검수 사유 / 비교 대상 / 거리 / 추천 액션 생성
 - [x] 전체 후보 443개 및 우선 검수 167개 출력 파일 확인
 
-현재 출력 CSV는 모두 PENDING입니다.
-수동 검수와 승인 데이터의 DB 반영은 다음 단계입니다.
+자동 생성 출력 CSV는 모두 PENDING이며 수동 검수 결과와 구분합니다.
+수동 검수 최신본은 `data/manual/content_place_decisions.csv`입니다(2026-10-07).
+REVIEWED 96 / PENDING 71이며 NEW_PLACE 58 / MERGE 22 / REJECT 15 / REVIEW 1 / 미분류 71입니다.
+검수 결과는 Supabase 반영 완료를 뜻하지 않습니다. 상세 이력은 [데이터 파이프라인](data-pipeline.md#manual-review-csv-history)을 참고합니다.
+
+- [x] 단계별 CSV를 단일 최신 파일로 통합하고 과거 스냅샷을 Git 이력으로 보존
+- [x] HIGH 및 CHECK_MERGE 후보 검수
+- [ ] CHECK_NEARBY 12건 계속 검수 — 다음 CP-0148 북촌한옥청 ↔ CP-0129 꽃라온
+- [ ] VERIFY_SOURCE 59건 및 CP-0018 REVIEW 추가 판단
+- [ ] 기존 좌표 보완 과제 및 현재 사라진 촬영지의 방문 안내 가능 여부 확인
+- [ ] CP-0140과 수동 CSV 밖 KCCF 대학로의 후속 통합·좌표 확인
+- [ ] 닌옆골목의 제외된 Blog 근거와 원본 파일 간 불일치를 서비스 반영 시 적용
+- [ ] CP-0151의 사용자 추가 인물 조합을 KCCF 근거와 구분하고 Scene / Actor / Evidence 연결 검토
 
 ### 완료
 
