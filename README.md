@@ -619,8 +619,26 @@ npm run dev
 
 ```bash
 npm run lint
+npm run test
 npm run build
 ```
+
+---
+
+## Tests
+
+Vitest를 Node 환경에서 실행합니다. `npm run test`는 한 번 실행한 뒤 종료하고,
+`npm run test:watch`는 파일 변경 시 다시 실행합니다.
+
+현재 테스트 범위는 Haversine 거리 계산과 예상 도보 시간 계산입니다.
+테스트는 대상 함수 옆의 `distance.test.ts`에 있으며, 작은 가상 좌표를 사용합니다.
+실제 DB, 외부 API, 환경변수 설정, 촬영지 CSV가 필요하지 않습니다.
+입력 검증을 새로 추가하지 않고 기존 계산 동작을 검증합니다.
+React 화면, Course 생성 규칙, TMAP 연동은 후속 테스트 범위입니다.
+
+기존 `@types/node` 20과 호환되는 Vitest 4.1.11을 사용합니다.
+설치된 Vite의 요구사항을 포함해 Node 22.12 이상 또는 24 이상을 사용하세요.
+이번 테스트 환경은 Node 26.7.0에서 검증했습니다.
 
 ---
 
