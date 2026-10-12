@@ -630,11 +630,18 @@ npm run build
 Vitest를 Node 환경에서 실행합니다. `npm run test`는 한 번 실행한 뒤 종료하고,
 `npm run test:watch`는 파일 변경 시 다시 실행합니다.
 
-현재 테스트 범위는 Haversine 거리 계산과 예상 도보 시간 계산입니다.
-테스트는 대상 함수 옆의 `distance.test.ts`에 있으며, 작은 가상 좌표를 사용합니다.
+현재 테스트 범위:
+
+- `distance.test.ts`: Haversine 거리와 예상 도보 시간 계산
+- `route-selection.test.ts`: 시간별 장소 수 상한, 최소 체류 45분, 총시간·구간 도보 제한, 후보 부족 시 장소 수 감소, 최단 경로·동률 선택, 1곳 선정 이유
+
+테스트는 대상 함수 옆에 있으며 작은 가상 좌표를 사용합니다.
+Course 생성의 순수 계산 함수는 `src/lib/recommendation/route-selection.ts`에,
+입력 검증·DB 조회·후보 필터링·응답 구성은 기존 Trip API에 유지합니다.
 실제 DB, 외부 API, 환경변수 설정, 촬영지 CSV가 필요하지 않습니다.
 입력 검증을 새로 추가하지 않고 기존 계산 동작을 검증합니다.
-React 화면, Course 생성 규칙, TMAP 연동은 후속 테스트 범위입니다.
+React 화면, DB 후보 필터링, TMAP 연동은 후속 테스트 범위입니다.
+최소 체류 45분은 최초 Course 생성 기준이며 편집·TMAP 재계산 정책은 변경하지 않습니다.
 
 기존 `@types/node` 20과 호환되는 Vitest 4.1.11을 사용합니다.
 설치된 Vite의 요구사항을 포함해 Node 22.12 이상 또는 24 이상을 사용하세요.
