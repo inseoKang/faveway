@@ -557,7 +557,7 @@ src/
 
 ### Requirements
 
-- Node.js 22 이상
+- Node.js 24.21.0 LTS (`.nvmrc`와 `package.json`의 `engines.node` 기준)
 - npm
 
 설치:
@@ -565,6 +565,9 @@ src/
 ```bash
 git clone https://github.com/inseoKang/faveway.git
 cd faveway
+nvm install
+nvm use
+node --version # v24.21.0
 npm ci
 ```
 
@@ -644,8 +647,54 @@ React 화면, DB 후보 필터링, TMAP 연동은 후속 테스트 범위입니�
 최소 체류 45분은 최초 Course 생성 기준이며 편집·TMAP 재계산 정책은 변경하지 않습니다.
 
 기존 `@types/node` 20과 호환되는 Vitest 4.1.11을 사용합니다.
-설치된 Vite의 요구사항을 포함해 Node 22.12 이상 또는 24 이상을 사용하세요.
-이번 테스트 환경은 Node 26.7.0에서 검증했습니다.
+로컬·CI 기준 버전은 Node.js 24.21.0 LTS이며, 함께 제공되는 npm 11.19.0으로 검증합니다.
+기존 Node.js 22.11.0은 현재 Vite의 Node.js 요구사항(22.12 이상)을 충족하지 않습니다.
+`nvm`을 사용하지 않는 경우에도 버전 관리 도구에서 `.nvmrc`와 같은 버전을 선택하세요.
+`engines.node`는 요구 버전을 명시하며 Node.js를 자동으로 전환하지 않습니다.
+
+---
+
+## Continuous Integration
+
+GitHub Actions의 `CI` workflow는 `main` 대상 PR과 `main` push에서 자동 실행됩니다.
+`main`에 병합한 뒤에는 Actions 탭에서 수동 실행도 가능합니다.
+
+Ubuntu에서 `.nvmrc`의 Node.js 버전(현재 24.21.0)을 읽어 다음 순서로 검사합니다.
+
+```text
+npm ci → npm run lint → npm run test → npm run build
+```
+
+`npm ci`는 lockfile 기준으로 의존성을 설치하고, npm 다운로드 캐시를 사용합니다.
+단계가 실패하면 뒤 단계는 실행하지 않습니다. 같은 브랜치의 새 실행이 시작되면
+이전 실행을 취소하며 실행 제한 시간은 15분입니다.
+
+현재 CI에는 `.env.local`이나 API Key를 등록할 필요가 없습니다.
+DB·TMAP·OpenAI 실제 연동을 호출하는 테스트는 포함하지 않고 Docent 생성은 비활성화합니다.
+패키지 설치와 `next/font/google` 폰트 다운로드를 위한 네트워크 연결은 필요합니다.
+CI의 build 산출물은 배포용으로 사용하지 않습니다.
+
+PR의 Checks에서 `Lint, test, build` 결과를 확인하고,
+실패하면 Actions 로그에서 Install dependencies / Lint / Test / Build 중 실패한 단계를 확인하세요.
+첫 GitHub 실행 결과는 이 workflow를 푸시하고 PR을 만든 뒤 확인해야 합니다.
+자동 배포와 병합 차단 규칙은 이번 설정에 포함하지 않습니다.
+필수 검사로 병합을 차단하려면 첫 실행 후 저장소 Ruleset에서 별도로 지정해야 합니다.
+
+---
+
+## Docker 도입 시 Node.js 버전 기준
+
+Docker 도입 시에도 `.nvmrc`와 같은 Node.js 24.21.0을 사용합니다.
+공식 이미지의 해당 버전 태그 제공 여부를 확인한 뒤 `node:24.21.0-bookworm-slim`을
+우선 검토하고, 빌드 단계와 실행 단계에 동일한 버전·배포판을 사용하세요.
+`node:latest`나 `node:24`처럼 버전이 이동하는 태그는 사용하지 않습니다.
+최종 Dockerfile에서는 이미지 digest까지 고정하면 재현성을 더 높일 수 있습니다.
+
+Node 업데이트 시 `.nvmrc`, `package.json`의 `engines.node`, lockfile 루트 메타데이터,
+Docker 이미지 버전과 digest를 함께 갱신하고 설치·lint·test·build를 다시 확인합니다.
+CI는 `.nvmrc`를 읽으므로 별도 Node 버전 숫자를 수정할 필요가 없습니다.
+호스트의 `node_modules`를 이미지에 복사하지 않고 컨테이너 안에서 `npm ci`로 설치하세요.
+실제 Dockerfile과 Linux 컨테이너 검증은 Docker 도입 단계에서 진행합니다.
 
 ---
 
