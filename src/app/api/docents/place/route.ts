@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
       !isPositiveInteger(body.contentId) ||
       !isPositiveInteger(body.placeId) ||
       !isDocentLanguage(body.language)
