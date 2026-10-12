@@ -638,6 +638,18 @@ Vitest를 Node 환경에서 실행합니다. `npm run test`는 한 번 실행한
 - `distance.test.ts`: Haversine 거리와 예상 도보 시간 계산
 - `route-selection.test.ts`: 시간별 장소 수 상한, 최소 체류 45분, 총시간·구간 도보 제한, 후보 부족 시 장소 수 감소, 최단 경로·동률 선택, 1곳 선정 이유
 
+- `course-state.test.ts`: 편집된 목록 재계산, 저장 키, 저장 JSON 복원·검증, 경로 재조회 키 (35개)
+
+기존 44개와 합쳐 총 79개이며 기존 CI의 `npm run test`에 자동 포함됩니다.
+Course 화면의 순수 함수는 `src/lib/course/course-state.ts`로 분리했습니다.
+LocalStorage 접근, 확인창, React 상태·Effect, 경로 요청은 화면에 유지합니다.
+잘못된 저장 JSON은 기존 화면의 catch에서 삭제 시도와 경고로 처리합니다.
+
+편집 테스트는 추가·삭제·재정렬된 목록의 계산 결과를 검증합니다.
+버튼의 중복 추가 차단·최소 1곳 유지, 실제 저장소 쓰기·접근 오류 경고,
+복원 후 fetch 실행·취소 및 화면 유지까지 검증한 것은 아닙니다.
+저장 JSON 왕복과 재조회 키 검증은 브라우저 저장·재조회 통합 테스트와 구분합니다.
+
 테스트는 대상 함수 옆에 있으며 작은 가상 좌표를 사용합니다.
 Course 생성의 순수 계산 함수는 `src/lib/recommendation/route-selection.ts`에,
 입력 검증·DB 조회·후보 필터링·응답 구성은 기존 Trip API에 유지합니다.
