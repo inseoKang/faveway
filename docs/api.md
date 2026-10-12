@@ -1,6 +1,6 @@
 # FAVEWAY API
 
-최종 업데이트: 2026-09-29.
+최종 업데이트: 2026-10-12.
 
 FAVEWAY의 Frontend에서 사용하는 Next.js Route Handler API를 정리합니다.
 
@@ -841,7 +841,7 @@ Context가 모두 존재할 때, 최소 한 Stop에 Scene description 또는 허
 ```json
 {
   "code": "DOCENT_CONTEXT_INSUFFICIENT",
-  "message": "아직 도슨트를 만들 만큼 충분한 장면 정보가 준비되지 않았어요."
+  "message": "아직 도슨트를 만들 만큼 충분한 장면 정보나 촬영 관계 근거가 준비되지 않았어요."
 }
 ```
 
@@ -864,6 +864,9 @@ ENABLE_OPENAI_DOCENT=false
 HTTP `400`
 
 잘못된 ID, 언어 또는 Course Stop이 전달된 경우입니다.
+Place와 Course 모두 JSON 문법 오류 및 null·비객체·배열 본문을 거절합니다.
+잘못된 요청에서는 DB·OpenAI를 호출하지 않습니다.
+단, 기능 활성 여부를 먼저 확인하므로 비활성 상태에서는 503을 우선 반환합니다.
 
 ## `DOCENT_CONTEXT_NOT_FOUND`
 
@@ -1114,7 +1117,8 @@ UI는 현재 `title`과 `narration`을 표시합니다.
 - Trip의 JSON 파싱 예외는 현재 외부 catch에서 `500 TRIP_CREATION_FAILED`로 처리합니다.
 - Trip 후보의 좌표 검사는 null 여부와 유한 숫자 여부입니다. 위경도 범위나 실제 도로 접근성을 검증하지는 않습니다.
 - Walking Route는 좌표에 `null`을 허용하고 해당 구간을 실패 처리합니다. 필드 누락·문자열 등 요청 형식 오류는 요청 전체 `400`입니다.
-- Docent / Walking Route의 잘못된 JSON 문법은 400으로 처리하지만, 파싱된 본문 전체가 null인 경우 등은 별도 방어가 완전하지 않습니다. 모든 입력 오류를 400으로 처리한다고 보장하지 않습니다.
+- Docent는 활성 상태에서 JSON 문법 오류·null·비객체·배열을 `400 INVALID_DOCENT_REQUEST`로 처리합니다. 추가 필드의 임의 촬영 정보는 서버 Context에 사용하지 않습니다.
+- Walking Route의 잘못된 JSON 문법은 400으로 처리하지만, 본문 전체가 null인 경우 등의 방어는 완전하지 않습니다. Docent의 입력 검증 수정이 Walking Route에 적용된 것은 아닙니다.
 - Walking Route는 최소 2개 Stop을 요구합니다. 1개 장소 Course에서는 Frontend가 경로 호출을 생략합니다.
 - Walking Route의 TMAP Key 미설정은 `500`, 정상 처리 응답은 `{ "data": { "segments": [...] } }`입니다.
 - Course 후보는 `is_active !== false`로 필터링합니다. `true`만 허용하는 검사와는 다릅니다.

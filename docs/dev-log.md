@@ -1,6 +1,6 @@
 # FAVEWAY Dev Log
 
-최종 업데이트: 2026-10-07.
+최종 업데이트: 2026-10-12.
 
 FAVEWAY 개발 과정에서 발생한 문제, 설계 판단, 구현 변경,
 예외 처리 기준을 기록합니다.
@@ -2556,6 +2556,77 @@ CP-0018의 REVIEW 판단, CP-0007·0008 좌표와 기존 메모의 미해결 과
 
 원본 출처, 사용자 확인, 최종 후보 분류, 현재 방문 가능 여부와 DB 반영 상태를 분리했다.
 동일 주소 병합의 한계를 실제 원본 대조로 확인하고 근거를 잃지 않도록 후속 작업을 기록했다.
+
+---
+
+# 2026-10-10 | 테스트 자동화 확장 및 경로·Docent 오류 회귀 검증
+
+정리 기준일은 **2026-10-10**입니다. 실제 개발·로컬 검증은 **2026-10-12**에 진행했으며,
+Git 커밋·PR·CI 실행 날짜를 소급한 기록이 아닙니다.
+
+## 문제와 판단
+
+Course 계산·편집·저장과 AI Docent의 근거 정책을 반복해서 검증할 필요가 있었습니다.
+순수 계산은 Vitest, 서버 정책은 DB·OpenAI 경계만 대체한 POST 통합 테스트,
+화면 상태와 비동기 요청은 실제 Chromium의 Playwright Mock 테스트로 나눴습니다.
+실제 DB나 API 키 없이 재현하도록 테스트 데이터를 서비스 데이터와 분리했습니다.
+
+## 구현
+
+- Vitest: 기존 거리 12개·Course 생성 32개·상태 관리 35개를 유지했습니다.
+- AI Docent: Context/생성 조건 25개·Prompt 7개·생성/출력 30개·Place API 28개·Course API 37개를 추가했습니다.
+- Vitest 합계는 79 + 127 = 206개입니다.
+- Playwright: Course 추가 1개·경로 경합 7개를 유지하고 Place/Course Dialog 각각 9개를 추가했습니다.
+- Playwright 합계는 8 + 18 = 26개이며 자동 테스트 총합은 232개입니다.
+- PUBLIC_DATA와 비어 있지 않은 verified_fact를 함께 확인하고 Scene과 evidence를 분리합니다.
+- Place는 장면 또는 허용 근거, Course는 모든 Context와 최소 한 장소의 근거라는 기존 생성 조건을 유지합니다.
+- 클라이언트 촬영 정보 대신 서버 DB Context를 사용하고 근거 부족 시 OpenAI 호출을 막습니다.
+- Responses 호출 인자·strict Schema·필수 문자열·오류 응답과 Dialog의 상태 전환·요청 본문을 검증합니다.
+
+## 이슈 1. 오래된 경로 실패 응답
+
+방문 순서 변경 후 이전 HTTP·네트워크 오류가 늦게 도착하면 최신 경로 상태와 지도 선분을
+이전 fallback으로 덮어썼습니다. 기존 catch는 AbortError만 무시하여 취소된 요청의 일반 오류가 통과했습니다.
+실패 처리 전에 `controller.signal.aborted`도 확인하여 상태 갱신을 막았습니다.
+오래된 성공·HTTP 오류·네트워크 오류, 최신 요청 실패 시 Haversine fallback,
+연속 편집 시 마지막 경로 유지 회귀 테스트로 확인했습니다. 실제 지도 렌더링은 검증 범위 밖입니다.
+
+## 이슈 2. Docent JSON null 입력
+
+Place/Course POST가 null의 속성에 접근해 500을 반환했습니다.
+객체 여부와 배열 여부를 먼저 확인하여 null·비객체·배열 요청을 `400 INVALID_DOCENT_REQUEST`로 처리합니다.
+잘못된 요청에서 DB·OpenAI 호출이 없음을 검증했습니다.
+기능 비활성화의 503 우선 처리와 기존 정상 요청·404/422/500 응답 정책은 유지합니다.
+
+## CI와 외부 요청 차단
+
+Node.js 24.21.0에서 npm ci → lint → Vitest → 키 없는 production build → Chromium 설치 → E2E를 실행합니다.
+E2E 전용 서버도 안전한 환경에서 자체 build를 하므로 현재 build는 두 번입니다.
+서버 fetch·HTTP(S)와 브라우저 미등록 API·외부 요청을 차단하고 감사 로그를 검사합니다.
+빌드의 Google Fonts 다운로드와 의존성 설치는 필요하며 OS 전체 네트워크 차단을 뜻하지 않습니다.
+실패 시 HTML report·screenshot·trace·감사 로그를 7일 보관하도록 설정했습니다.
+
+## 검증 결과 (실제 검증일: 2026-10-12)
+
+일반 Mac 터미널에서 사용자가 Node.js 24.21.0의 lint, Vitest 전체,
+Playwright 전체 및 E2E 전용 키 없는 production build 통과를 확인했습니다.
+Playwright 실행은 11.7초였으며 build·설치 시간과 구분합니다.
+
+최신 main `4a6fcbce5d7d1cd028cfe3f3e3ae0904e8d89718`의
+[GitHub Actions 실행](https://github.com/inseoKang/faveway/actions/runs/38220610539)도 별도로 확인했습니다.
+2026-10-12 한국 시간 16:56:49~16:58:07에 실행한 job과 lint·test·build·E2E 단계가 성공했습니다.
+실패 artifact 업로드는 이 성공 실행에서 생략되어 실제 업로드 성공을 검증한 것은 아닙니다.
+
+## 한계와 다음 작업
+
+Mock 검증은 실제 Supabase·TMAP·OpenAI 연동이나 생성 문장의 사실 정확성 보증이 아닙니다.
+LocalStorage 접근 오류·삭제 확인 등 기존 수동 검증을 모두 자동화한 것도 아닙니다.
+실제 외부 API 통합 검증, 모델 출력 품질 평가, Docker, CD, 운영 Logging/Observability는 남아 있습니다.
+
+## 포트폴리오 포인트
+
+계산·서버 정책·브라우저 동작을 구분해 자동화하고, 비동기 실패 경합과 입력 검증 버그를
+재현 가능한 회귀 테스트로 연결했습니다. 외부 서비스 의존성을 분리한 CI로 반복 검증할 수 있습니다.
 
 ---
 

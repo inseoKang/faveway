@@ -1,6 +1,6 @@
 # FAVEWAY Architecture
 
-최종 업데이트: 2026-10-07.
+최종 업데이트: 2026-10-12.
 
 ## 1. 목적
 
@@ -796,3 +796,31 @@ MERGE 기록만으로 장면·배우·근거가 이전되거나 Supabase에 반�
 - Course 생성은 규칙 기반이며 AI Ranking / 개인화는 아직 구현 예정입니다.
 - `PUBLIC_DATA` 필터는 Docent의 `verified_fact` 사용 조건입니다. 모든 Course 후보의 필수 검증 상태가 아닙니다.
 - Structured Output은 응답 형식을 제한합니다. 생성 내용의 사실 검증은 별도 품질 확인이 필요합니다.
+
+
+---
+
+# 26. 테스트 및 CI 구조
+
+| 계층 | 실제 실행 범위 | 대체하는 경계 |
+| --- | --- | --- |
+| Vitest 순수 로직 | 거리·Course 선택·편집 목록·저장 JSON | 가상 좌표·저장 데이터 |
+| Vitest API 통합 | 실제 POST·Context·Prompt·출력 검증 | Supabase·OpenAI 클라이언트 팩토리 |
+| Playwright | Chromium의 Course·DocentDialog·요청 본문 | 등록한 API 응답·경합 재현용 경로 전송 |
+
+Vitest는 `src/**/*.test.ts`, Playwright는 `tests/e2e`를 수집합니다.
+가상 데이터는 `src/test/fixtures/docent.ts`와 `tests/e2e/fixtures/course.ts`에서 관리합니다.
+브라우저 Mock은 서버 DB Context나 실제 모델을 실행하는 검증이 아닙니다.
+
+Course 경로 Effect는 cleanup에서 이전 요청을 취소합니다.
+성공뿐 아니라 실패 처리에서도 signal.aborted를 확인하고, Course 키 비교로 해당 경로의 대상을 확인합니다.
+취소된 이전 오류는 경로 상태·선분을 갱신하지 않으며 최신 요청 실패에는 기존 Haversine fallback을 적용합니다.
+
+CI는 `.nvmrc` 기준 설치·lint·Vitest·키 없는 build·Chromium 설치·E2E 순서입니다.
+`tests/e2e/helpers/server.mjs`가 키를 제거하고 자체 build 후 서버를 실행하므로 CI build는 두 번입니다.
+`network-guard.mjs`와 브라우저 요청 차단으로 미등록 API·외부 서비스 요청을 실패 처리합니다.
+빌드 중 Google Fonts 다운로드는 예외이며 OS 방화벽을 대신하지는 않습니다.
+실패 보고서·스크린샷·trace·감사 로그는 7일 보관하도록 설정되어 있습니다.
+
+현재 개수·실행 결과는 [README](../README.md#tests)를 참고합니다.
+실제 외부 서비스 가용성·지도 렌더링·AI 문장의 사실 정확성, Docker·자동 배포·운영 관측은 별도 범위입니다.

@@ -1,6 +1,6 @@
 # FAVEWAY Data Fallback Policy
 
-최종 업데이트: 2026-09-29.
+최종 업데이트: 2026-10-12.
 
 ## 1. 목적
 
@@ -558,6 +558,11 @@ Actor 추측
 
 ## 25. AI Docent 오류 분류
 
+### `INVALID_DOCENT_REQUEST`
+
+기능 활성 상태에서 잘못된 ID·언어·Stop 및 JSON null·비객체·배열·문법 오류는
+`400`으로 거절하고 DB·OpenAI를 호출하지 않습니다. 비활성 상태의 `503` 우선 처리는 유지합니다.
+
 ### `DOCENT_CONTEXT_NOT_FOUND`
 
 ```text
@@ -627,6 +632,11 @@ fallback
 ```
 
 ---
+
+취소된 이전 요청의 성공뿐 아니라 HTTP·네트워크 오류도 최신 경로 상태와 선분을 변경하지 않습니다.
+Course 화면의 실패 처리에서 `signal.aborted`를 확인하며, 최신 요청 자체의 실패는 기존 Haversine fallback을 유지합니다.
+이전 성공/실패의 늦은 도착·최신 실패·연속 편집은 Playwright Mock 회귀 테스트로 검증합니다.
+실제 TMAP 가용성이나 지도 SDK 렌더링을 검증한 것은 아닙니다.
 
 ## 28. 상태 분류
 
@@ -750,4 +760,4 @@ AI Explanation
 - 배우별 장소 조회에는 서울 필터가 없고, Trip / 작품별 장소 조회에는 서울 필터가 있습니다.
 - 좌표 `null`이 포함된 Walking Route 구간은 실패 처리하지만, 요청 필드 자체가 잘못된 경우에는 요청 전체를 거절합니다.
 - 서버의 설명 근거 부족 422는 Empty이고, Context 없음 404는 현재 UI에서 Error입니다.
-- API Error / Retry 분기는 구현되어 있지만 모든 실패 시나리오의 실제 재현 검증 완료를 뜻하지 않습니다.
+- Docent Empty / Error / Retry와 Course 경로 경합은 Mock 브라우저 테스트로 검증했습니다. 실제 외부 API의 모든 실패 시나리오를 재현한 것은 아닙니다.

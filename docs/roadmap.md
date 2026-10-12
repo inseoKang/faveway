@@ -1,6 +1,6 @@
 # FAVEWAY Roadmap
 
-최종 업데이트: 2026-10-07.
+최종 업데이트: 2026-10-12.
 
 FAVEWAY는 영화·드라마·배우를 기준으로 실제 촬영지를 탐색하고,
 사용자가 선택한 콘텐츠와 조건을 바탕으로
@@ -269,6 +269,21 @@ Place
 
 ---
 
+## Test Automation / CI
+
+- [x] Vitest 거리·Course 생성·편집 상태·저장 JSON 테스트
+- [x] AI Docent Context·근거·생성 조건·Prompt·출력·API 통합 테스트
+- [x] Playwright Course 추가·경로 경합·Place/Course Dialog Mock 테스트
+- [x] 오래된 경로 실패 응답 및 Docent null 입력 버그 회귀 검증
+- [x] GitHub Actions lint·test·키 없는 build·Chromium E2E 연동
+- [x] 실패 artifact 보관 설정 (성공 실행에서는 업로드 생략)
+- [x] 2026-10-12 로컬 검증 및 최신 main CI 성공 확인
+
+파일별 개수와 실행 결과는 [README Tests](../README.md#tests)를 기준으로 관리합니다.
+Mock 통과와 실제 외부 서비스 연동 검증은 구분합니다.
+
+---
+
 # 앞으로 할 작업
 
 ## 1. Data 확장 및 정제
@@ -415,6 +430,17 @@ REVIEWED 96 / PENDING 71이며 NEW_PLACE 58 / MERGE 22 / REJECT 15 / REVIEW 1 / 
 - [ ] 저장 Course 목록
 - [ ] Course 상세
 - [ ] Course 삭제
+
+---
+
+## 6. Engineering 확장
+
+- [ ] Docker 환경 구축 및 검증
+- [ ] CD 자동 배포 구성
+- [ ] 운영 Logging / Observability 도입
+- [ ] 실제 외부 API 통합 테스트
+- [ ] 모델 출력의 사실 정확성·정책 준수 평가
+- [ ] 필요 시 안전한 build 재사용으로 CI 중복 build 최적화
 
 ---
 
