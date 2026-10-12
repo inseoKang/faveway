@@ -675,19 +675,21 @@ Ubuntu에서 `.nvmrc`의 Node.js 버전(현재 24.21.0)을 읽어 다음 순서�
 
 ```text
 npm ci → npm run lint → npm run test → npm run build
+→ npx playwright install --with-deps chromium → npm run test:e2e
 ```
 
 `npm ci`는 lockfile 기준으로 의존성을 설치하고, npm 다운로드 캐시를 사용합니다.
-단계가 실패하면 뒤 단계는 실행하지 않습니다. 같은 브랜치의 새 실행이 시작되면
+단계가 실패하면 뒤 검사 단계는 실행하지 않지만 실패 artifact 업로드는 시도합니다. 같은 브랜치의 새 실행이 시작되면
 이전 실행을 취소하며 실행 제한 시간은 15분입니다.
 
 현재 CI에는 `.env.local`이나 API Key를 등록할 필요가 없습니다.
 DB·TMAP·OpenAI 실제 연동을 호출하는 테스트는 포함하지 않고 Docent 생성은 비활성화합니다.
-패키지 설치와 `next/font/google` 폰트 다운로드를 위한 네트워크 연결은 필요합니다.
+패키지·Chromium·시스템 의존성 설치와 `next/font/google` 폰트 다운로드를 위한 네트워크 연결은 필요합니다.
 CI의 build 산출물은 배포용으로 사용하지 않습니다.
 
 PR의 Checks에서 `Lint, test, build` 결과를 확인하고,
-실패하면 Actions 로그에서 Install dependencies / Lint / Test / Build 중 실패한 단계를 확인하세요.
+실패하면 Actions 로그에서 Install dependencies / Lint / Test / Build / Install Chromium / Playwright E2E 중 실패한 단계를 확인하세요.
+E2E는 키 없는 자체 build를 다시 수행합니다. 실패 artifact 구성은 아래 GitHub Actions CI 절을 참고하세요.
 첫 GitHub 실행 결과는 이 workflow를 푸시하고 PR을 만든 뒤 확인해야 합니다.
 자동 배포와 병합 차단 규칙은 이번 설정에 포함하지 않습니다.
 필수 검사로 병합을 차단하려면 첫 실행 후 저장소 Ruleset에서 별도로 지정해야 합니다.
@@ -734,3 +736,104 @@ FAVEWAY의 핵심은 AI가 많은 장소를 만들어내는 것이 아니라,
 현재 AI는 DB Context를 바탕으로 도슨트 설명을 생성합니다.
 개인화와 AI Ranking은 다음 확장 단계이며,
 촬영지와 장면 사실을 임의로 생성하지 않도록 입력과 Prompt를 제한합니다.
+
+## Course 브라우저 Mock 테스트
+
+Node.js 24.21.0에서 Playwright의 Chromium으로 실행합니다. 기존 `npm run test`는
+Vitest 단위 테스트만 실행합니다. GitHub Actions workflow에는 Chromium E2E 단계도 포함되어 있습니다.
+실제 GitHub runner 통과 여부는 푸시 후 PR Checks에서 확인해야 합니다.
+
+```bash
+nvm use
+npm ci
+npx playwright install chromium
+npm run test:e2e
+# 실행 과정을 살펴보려면
+npm run test:e2e:ui
+# 마지막 HTML 결과
+npx playwright show-report
+```
+
+- 테스트가 키 없는 환경에서 `npm run build` 후 전용 서버(127.0.0.1:43100)를 시작합니다.
+  실행 중인 서버를 재사용하지 않으며, 같은 프로젝트의 dev/build와 동시에 실행하지 마세요
+  (Next.js 빌드 디렉터리를 공유합니다).
+- 각 테스트는 새 브라우저 저장소에서 가짜 Course URL로 시작합니다.
+  테스트 데이터는 `tests/e2e/fixtures/course.ts`에만 있습니다.
+- 작품·후보·도보 경로 API는 서버로 전달하지 않고 Mock 응답을 제공합니다.
+  그 외 API 및 외부 도메인 요청은 차단하고 테스트 실패로 기록합니다.
+- 서버도 Supabase·TMAP·OpenAI·Kakao 키를 비우고 Docent를 끕니다.
+  테스트 전용 preload가 서버의 fetch 및 Node HTTP(S) 외부 요청을 차단합니다.
+  빌드 시 기존 next/font를 위한 Google Fonts 다운로드만 허용하며 실행 시에는 허용하지 않습니다.
+  이 장치는 HTTP 차단이며 OS 전체 네트워크 방화벽은 아닙니다.
+- Service Worker는 차단합니다. 테스트 보고서의 `network-audit` 첨부와
+  `.e2e-network.jsonl`에서 예상하지 않은 요청을 확인할 수 있습니다.
+  빈 기록은 해당 차단 장치에서 외부 서비스 요청 시도를 발견하지 않았다는 뜻입니다.
+- 일부 경합 테스트는 브라우저 안에서 경로 fetch만 대체해 AbortSignal을 무시하고
+  이전 응답을 의도적으로 늦게 전달합니다. 네이티브 fetch 취소 테스트와 구분됩니다.
+- 실패 시 스크린샷·trace·HTML 보고서가 생성됩니다. 결과물은 Git에서 제외됩니다.
+  실패 테스트를 skip하거나 기대 결과를 완화하지 않습니다.
+
+검증 항목은 장소 추가·기존 장소 및 중복 후보 제외·저장·새 경로 요청,
+네이티브 요청 취소, 이전 성공/HTTP 오류/네트워크 오류의 늦은 도착입니다.
+지도 SDK와 실제 지도 렌더링, 외부 서비스의 응답 계약 자체는 이 테스트의 검증 범위가 아닙니다.
+
+### GitHub Actions CI
+
+PR의 대상 브랜치가 main일 때, main push 및 수동 실행에서 기존 quality job을 실행합니다.
+기존 Check 이름 `Lint, test, build`는 브랜치 보호 설정과의 호환성을 위해 유지합니다.
+
+1. `npm ci`
+2. `npm run lint`
+3. `npm run test` (Vitest 79개)
+4. 키 없는 환경과 서버 HTTP 차단 장치를 적용한 `npm run build`
+5. `npx playwright install --with-deps chromium` (Chromium 및 Ubuntu 시스템 의존성)
+6. `npm run test:e2e` (Playwright 8개, worker 1, 자동 재시도 없음)
+
+Node 버전은 `.nvmrc`의 24.21.0을 사용하고 Playwright 버전은 lockfile로 고정합니다.
+서비스 secrets는 참조하지 않습니다. Supabase URL·서비스 키·TMAP·OpenAI·Kakao 키는 빈 값이며,
+Docent는 비활성화합니다. 빌드 중 Google Fonts만 예외로 허용하고 외부 서비스 요청은 차단합니다.
+
+이번에는 E2E 서버의 검증된 실행 방식을 유지하므로 **build를 두 번** 실행합니다.
+E2E는 기존 `.next`를 그대로 시작하지 않고 키 없는 환경에서 다시 빌드합니다.
+빌드 공유와 출처 검증 로직은 추가하지 않았습니다. 추후 시간이 문제가 될 때 최적화할 수 있습니다.
+
+실패 시 `playwright-failure-<run id>-<attempt>` artifact를 7일간 보관합니다.
+HTML 보고서(`playwright-report/`), screenshot·trace(`test-results/`),
+E2E 감사 로그(`.e2e-network.jsonl`)와 첫 build의 별도 감사 로그를 포함합니다.
+숨김 감사 파일을 포함하도록 설정하되 명시된 경로만 업로드하며 `.env`는 포함하지 않습니다.
+브라우저 시작 전 실패하면 screenshot·trace가 없을 수 있고, job 강제 취소/시간 초과 시 업로드는 보장되지 않습니다.
+
+GitHub PR의 Checks에서 quality job 전체 통과, Vitest 79개와 Playwright 8개 결과를 확인하세요.
+실패 artifact는 Actions의 해당 실행 상세 페이지에서 내려받습니다.
+CI 성공 여부와 artifact 업로드는 실제 GitHub runner 실행 전에는 검증 완료로 기록하지 않습니다.
+
+### 경로 응답 회귀 검증 상태 (2026-10-12)
+
+일반 Mac 터미널의 수정 전 실행은 5개 중 3개 통과, 2개 실패(약 17.5초)였습니다.
+HTTP 오류·네트워크 오류 Trace에서 최신 경로의 real 상태가 이전 요청의 fallback으로
+바뀌는 것을 확인했습니다. Course의 순서·거리·시간 검사 이후 경로 상태 검사에서 실패했습니다.
+
+`src/app/course/page.tsx`의 catch 진입 시 `controller.signal.aborted`도 확인하도록 수정했습니다.
+기존 cleanup이 이전 요청을 abort하므로, 취소된 요청의 일반 오류도 상태 갱신 전에 무시됩니다.
+현재 요청의 일반 오류는 기존 Haversine fallback을 그대로 사용합니다.
+
+기존 5개 테스트를 유지하고 최신 HTTP 오류·최신 네트워크 오류·연속 편집을 추가하여 총 8개입니다.
+실제 경로의 각 인접 장소 쌍에 맞는 선분이 유지되는지도 화면의 구간 안내로 확인합니다.
+실제 Kakao 지도 SDK의 폴리라인 렌더링은 검증하지 않습니다.
+
+사용자가 일반 Mac 터미널의 Node.js 24.21.0에서 lint, Vitest 79개,
+키 없는 build를 포함한 Playwright 8개 전체 통과를 확인했습니다.
+이는 Mac 로컬 검증 결과이며 GitHub Actions 실행 결과와 구분합니다.
+Codex 실행 환경에서는 Turbopack 내부 포트 또는 Chromium 생성 제한이 있을 수 있습니다.
+
+```bash
+nvm use
+npm run lint
+npm run test
+# 키 없는 build 후 Playwright 8개 실행
+npm run test:e2e
+npx playwright show-report
+```
+
+Chromium 설치와 중복 build를 포함한 CI 추가 시간은 약 1~3분으로 예상하되,
+runner 다운로드·빌드 속도에 따라 달라지므로 첫 Actions 실행에서 측정해야 합니다.

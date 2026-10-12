@@ -22,6 +22,11 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       ENABLE_OPENAI_DOCENT: "false"
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      SUPABASE_SECRET_KEY: ""
+      TMAP_APP_KEY: ""
+      OPENAI_API_KEY: ""
+      NEXT_PUBLIC_KAKAO_MAP_JAVASCRIPT_KEY: ""
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -44,5 +49,35 @@ jobs:
       - name: Test
         run: npm run test
 
+      # Keep the existing build check. E2E rebuilds with its own safe environment;
+      # no arbitrary/pre-existing .next artifact is reused by the test server.
       - name: Build
-        run: npm run build
+        env:
+          FAVEWAY_E2E_BUILD: "1"
+          FAVEWAY_E2E_AUDIT: ${{ runner.temp }}/faveway-ci-build-network.jsonl
+          NODE_OPTIONS: '--import="${{ github.workspace }}/tests/e2e/helpers/network-guard.mjs"'
+        run: |
+          : > "$FAVEWAY_E2E_AUDIT"
+          npm run build
+          test ! -s "$FAVEWAY_E2E_AUDIT"
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright E2E
+        run: npm run test:e2e
+
+      - name: Upload failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            .e2e-network.jsonl
+            ${{ runner.temp }}/faveway-ci-build-network.jsonl
+          # Only the explicit paths above are uploaded; never upload .env files.
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

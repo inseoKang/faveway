@@ -553,7 +553,11 @@ function CourseContent() {
         });
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        // Cleanup aborts superseded requests even if their transport reports a generic error.
+        if (
+          controller.signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
           return;
         }
 

@@ -53,3 +53,7 @@ data/raw/kccf/*.csv
 .venv/
 __pycache__/
 *.pyc
+# Browser tests
+/playwright-report/
+/test-results/
+/.e2e-network.jsonl
