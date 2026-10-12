@@ -784,10 +784,10 @@ PR의 대상 브랜치가 main일 때, main push 및 수동 실행에서 기존 
 
 1. `npm ci`
 2. `npm run lint`
-3. `npm run test` (Vitest 79개)
+3. `npm run test` (Vitest 206개)
 4. 키 없는 환경과 서버 HTTP 차단 장치를 적용한 `npm run build`
 5. `npx playwright install --with-deps chromium` (Chromium 및 Ubuntu 시스템 의존성)
-6. `npm run test:e2e` (Playwright 8개, worker 1, 자동 재시도 없음)
+6. `npm run test:e2e` (Playwright 26개, worker 1, 자동 재시도 없음)
 
 Node 버전은 `.nvmrc`의 24.21.0을 사용하고 Playwright 버전은 lockfile로 고정합니다.
 서비스 secrets는 참조하지 않습니다. Supabase URL·서비스 키·TMAP·OpenAI·Kakao 키는 빈 값이며,
@@ -803,7 +803,7 @@ E2E 감사 로그(`.e2e-network.jsonl`)와 첫 build의 별도 감사 로그를 
 숨김 감사 파일을 포함하도록 설정하되 명시된 경로만 업로드하며 `.env`는 포함하지 않습니다.
 브라우저 시작 전 실패하면 screenshot·trace가 없을 수 있고, job 강제 취소/시간 초과 시 업로드는 보장되지 않습니다.
 
-GitHub PR의 Checks에서 quality job 전체 통과, Vitest 79개와 Playwright 8개 결과를 확인하세요.
+GitHub PR의 Checks에서 quality job 전체 통과, Vitest 206개와 Playwright 26개 결과를 확인하세요.
 실패 artifact는 Actions의 해당 실행 상세 페이지에서 내려받습니다.
 CI 성공 여부와 artifact 업로드는 실제 GitHub runner 실행 전에는 검증 완료로 기록하지 않습니다.
 
@@ -837,3 +837,61 @@ npx playwright show-report
 
 Chromium 설치와 중복 build를 포함한 CI 추가 시간은 약 1~3분으로 예상하되,
 runner 다운로드·빌드 속도에 따라 달라지므로 첫 Actions 실행에서 측정해야 합니다.
+
+
+## AI Docent 자동 테스트
+
+서비스 수정은 Place/Course API의 JSON `null`·비객체 요청을
+`400 INVALID_DOCENT_REQUEST`로 거부하는 검증 추가에 한정합니다.
+정상 요청과 503/404/422/500 정책, Course 생성·편집·저장 로직은 유지합니다.
+
+### 범위와 개수
+
+- 기존 Vitest 79개 유지 + Docent 127개 = **206개**
+  - Context·근거·생성 조건 25개
+  - Prompt 정책과 입력 분리 7개
+  - Responses 인자·Structured Output·파싱·오류 30개
+  - 실제 Route/Context/Prompt/생성 로직의 통합 검증: Place 28개, Course 37개
+- 기존 Playwright 8개 유지 + Place/Course Dialog 각 9개 = **26개**
+  - Loading→Success, Empty, 404/500/503 Error, 네트워크 Error,
+    Retry→Loading→Success, 필드 누락·깨진 JSON, Course 유지
+  - 요청 본문을 정확히 비교하여 ID·순서·언어 외의 클라이언트 사실이 전송되지 않음을 확인
+
+Vitest는 실제 서버를 띄우지 않고 POST 함수를 실행합니다.
+`src/test/fixtures/docent.ts`의 가짜 데이터와 `src/test/helpers/docent-boundaries.ts`로
+Supabase 클라이언트 팩토리·OpenAI 클라이언트 팩토리만 대체합니다.
+DB fake는 eq/in 조건과 select를 적용하고 실제 입력 조건을 기록합니다.
+API 테스트는 Context 로더·Prompt·응답 파서를 Mock으로 대체하지 않습니다.
+새 테스트의 fetch·Node HTTP(S)는 모두 차단하며, 서비스 코드가 오류를 잡아도
+시도가 있었으면 afterEach 검사에서 실패합니다. 환경변수와 Mock은 테스트마다 복원합니다.
+
+Playwright는 기존 키 없는 서버와 네트워크 차단을 유지합니다.
+Docent 응답을 명시적으로 등록한 테스트에서만 두 Docent API를 Mock으로 응답합니다.
+기존 Course 테스트에서는 미등록 Docent 요청이 여전히 차단됩니다.
+브라우저 테스트는 서버 생성 로직이 아닌 UI와 요청 계약을 검증합니다.
+
+### 실행과 결과 구분
+
+```bash
+nvm use
+npm run lint
+npm run test
+# 키 없는 npm run build를 먼저 실행한 뒤 브라우저 테스트 실행
+npm run test:e2e
+npx playwright show-report
+```
+
+Node.js 24.21.0에서 lint, Vitest 206개, TypeScript, 키 없는 production build를 확인했습니다.
+이번 Codex 실행에서는 Chromium의 MachPortRendezvous 권한 오류로 E2E 26개가
+브라우저 시작 단계에서 막혔습니다. 기존 Course E2E 8개의 이전 통과와 구분하며,
+새 Docent E2E 18개는 일반 터미널 또는 PR Checks에서 확인해야 합니다.
+현재 Vitest/Playwright 파일 패턴에 포함되므로 CI workflow 변경 없이 자동 수집됩니다.
+
+### 검증하지 않는 범위
+
+실제 DB 조회, OpenAI 서비스 응답·요금·가용성, 생성 문장의 사실 정확성,
+환각 방지 효과, 음성 재생은 검증하지 않습니다.
+PUBLIC_DATA 사실 필터와 별도 Scene 기록 정책, 최소 생성 조건을 검증하는 테스트입니다.
+Dialog의 대상 변경 중 요청 경합이나 실제 모델의 정책 준수 평가도 별도 작업입니다.
+UI의 잘못된 응답 테스트는 필수 필드 누락과 JSON 파싱 실패를 대상으로 하며,
+서버에서 정상 문자열 검증을 통과한 응답을 사용하는 기존 구조를 변경하지 않습니다.

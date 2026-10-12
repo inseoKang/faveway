@@ -1,10 +1,16 @@
 import { test as base, expect, type Page, type Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { places, routeResponse, type RouteStop } from '../fixtures/course';
-export const test = base.extend<{ network: { requests: RouteStop[][]; walking?: (route: Route, stops: RouteStop[]) => Promise<void> } }>({
+type MockNetwork = {
+  requests: RouteStop[][];
+  walking?: (route: Route, stops: RouteStop[]) => Promise<void>;
+  docent?: (route: Route, mode: 'place' | 'course') => Promise<void>;
+  docentRequests: Array<{ mode: string; body: unknown }>;
+};
+export const test = base.extend<{ network: MockNetwork }>({
   network: [async ({ context }, use, testInfo) => {
     const unexpected: string[] = [];
-    const network: { requests: RouteStop[][]; walking?: (route: Route, stops: RouteStop[]) => Promise<void> } = { requests: [] };
+    const network: MockNetwork = { requests: [], docentRequests: [] };
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin !== 'http://127.0.0.1:43100') {
@@ -24,6 +30,12 @@ export const test = base.extend<{ network: { requests: RouteStop[][]; walking?: 
         if (network.walking) return network.walking(route, stops);
         return route.fulfill({ json: routeResponse(stops) });
       }
+      if (network.docent && route.request().method() === 'POST' &&
+        (url.pathname === '/api/docents/place' || url.pathname === '/api/docents/course')) {
+        const mode = url.pathname.endsWith('/place') ? 'place' : 'course';
+        network.docentRequests.push({ mode, body: route.request().postDataJSON() });
+        return network.docent(route, mode);
+      }
       if (url.pathname.startsWith('/api/')) {
         unexpected.push(url.pathname); return route.abort('blockedbyclient');
       }
@@ -31,7 +43,7 @@ export const test = base.extend<{ network: { requests: RouteStop[][]; walking?: 
     });
     await use(network);
     const serverAudit = readFileSync('.e2e-network.jsonl', 'utf8');
-    await testInfo.attach('network-audit', { body: JSON.stringify({ unexpected, serverAudit, mockedRouteRequests: network.requests.length }), contentType: 'application/json' });
+    await testInfo.attach('network-audit', { body: JSON.stringify({ unexpected, serverAudit, mockedRouteRequests: network.requests.length, mockedDocentRequests: network.docentRequests.length }), contentType: 'application/json' });
     expect(unexpected, 'Unexpected browser requests were blocked').toEqual([]);
     expect(serverAudit, 'Unexpected server HTTP requests were blocked').toBe('');
   }, { auto: true }],

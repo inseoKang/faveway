@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
       !Array.isArray(body.stops) ||
       body.stops.length === 0 ||
       body.stops.length > 10 ||
