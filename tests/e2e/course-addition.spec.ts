@@ -1,0 +1,20 @@
+import { test, expect, stopNames } from './helpers/course-mocks';
+import { courseUrl, storageKey } from './fixtures/course';
+test('adds a new place once, excludes existing and duplicate candidates, saves and requests the new route', async ({ page, network }) => {
+  await page.goto(courseUrl);
+  await expect(page.getByRole('status')).toContainText('실제 도보 경로 기준');
+  await page.getByRole('button', { name: '+ 촬영지 추가하기', exact: true }).click();
+  const candidates = page.locator('#course-place-candidates');
+  await expect(candidates.getByRole('heading', { level: 3 })).toHaveText(['테스트 D']);
+  await expect(candidates.getByRole('button', { name: '테스트 A 코스에 추가' })).toHaveCount(0);
+  await candidates.getByRole('button', { name: '테스트 D 코스에 추가' }).click();
+  await expect(stopNames(page)).toHaveText(['테스트 A', '테스트 B', '테스트 C', '테스트 D']);
+  await expect(candidates.getByRole('button', { name: '테스트 D 코스에 추가' })).toHaveCount(0);
+  await expect(candidates).toContainText('더 추가할 수 있는 촬영지가 없어요.');
+  await expect.poll(() => network.requests.at(-1)?.map(stop => stop.placeId)).toEqual([9001, 9002, 9003, 9004]);
+  const ids = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).stops.map((s: { placeId: number }) => s.placeId), storageKey);
+  expect(ids).toEqual([9001, 9002, 9003, 9004]);
+  await page.getByRole('button', { name: '추가 목록 닫기' }).click();
+  await page.getByRole('button', { name: '+ 촬영지 추가하기', exact: true }).click();
+  await expect(candidates.getByRole('button')).toHaveCount(0);
+});
